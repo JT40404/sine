@@ -10,7 +10,7 @@ window.SINE_CONFIG = {
 
   links: {
     docs: "",      // e.g. "https://docs.example.com" — leave "" to hide
-    x: "",         // e.g. "https://x.com/yourhandle"
+    x: "https://x.com/SineWaveSOL",
     telegram: "",  // e.g. "https://t.me/yourgroup"
     terms: ""
   }

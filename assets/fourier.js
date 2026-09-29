@@ -173,6 +173,122 @@
     return { share: hits / sp.frames.length, change: mean(band.slice(-third)) / Math.max(1e-12, mean(band.slice(0, third))) };
   }
 
+  /* ---------------- projection ---------------- */
+
+  /** Least-squares fit of y[n] ≈ a + b·n + Σ (c_j cos 2πf_j n + d_j sin 2πf_j n); f in cycles per sample. */
+  function harmonicFit(y, freqs) {
+    var N = y.length, m = 2 + 2 * freqs.length, i, j, n;
+    var basis = function (n) {
+      var r = [1, n / N];
+      for (var q = 0; q < freqs.length; q++) { var g = 2 * Math.PI * freqs[q] * n; r.push(Math.cos(g), Math.sin(g)); }
+      return r;
+    };
+    var A = [];
+    for (i = 0; i < m; i++) { A.push(new Array(m + 1).fill(0)); }
+    for (n = 0; n < N; n++) {
+      var r = basis(n);
+      for (i = 0; i < m; i++) { for (j = 0; j < m; j++) A[i][j] += r[i] * r[j]; A[i][m] += r[i] * y[n]; }
+    }
+    for (var c = 0; c < m; c++) {
+      var p = c;
+      for (i = c + 1; i < m; i++) if (Math.abs(A[i][c]) > Math.abs(A[p][c])) p = i;
+      var tmp = A[c]; A[c] = A[p]; A[p] = tmp;
+      if (Math.abs(A[c][c]) < 1e-12) return null;
+      for (i = 0; i < m; i++) {
+        if (i === c) continue;
+        var f = A[i][c] / A[c][c];
+        for (j = c; j <= m; j++) A[i][j] -= f * A[c][j];
+      }
+    }
+    var beta = A.map(function (row, i) { return row[m] / row[i]; });
+    return function (n) { return basis(n).reduce(function (s, v, i) { return s + v * beta[i]; }, 0); };
+  }
+
+  /**
+   * Forecast log price h = 0..H steps past the end of `prices`, using only `prices`:
+   * find the rhythms (analyze), fit trend + those rhythms by least squares, extend forward,
+   * anchored so h = 0 is the last actual close.
+   */
+  function forecastFrom(prices, dt, H) {
+    var res = analyze(prices, dt, 3);
+    if (!res.peaks.length) return null;
+    var y = prices.map(Math.log), last = y.length - 1;
+    var fit = harmonicFit(y, res.peaks.map(function (p) { return dt / p.period; }));
+    if (!fit) return null;
+    var base = fit(last), out = [];
+    for (var h = 0; h <= H; h++) out.push(y[last] + fit(last + h) - base);
+    return { path: out, fit: fit, base: base };
+  }
+
+  function quantile(arr, q) {
+    if (!arr.length) return 0;
+    var a = arr.slice().sort(function (x, y) { return x - y; });
+    var pos = (a.length - 1) * q, i = Math.floor(pos), f = pos - i;
+    return a[i] + (a[Math.min(a.length - 1, i + 1)] - a[i]) * f;
+  }
+
+  /**
+   * "If the pattern holds" projection with an honest track record.
+   * Horizon H = the main cycle length, capped at a fifth of the window.
+   * Walk-forward test: at up to 12 earlier points, re-run the whole method on the 60% of data
+   * before that point only, project H steps, and compare with what actually happened.
+   * The band is the 80th percentile of those past misses at each step ahead (or, with too few
+   * tests, of typical past price moves over that many steps).
+   */
+  function project(prices, dt, mainPeriodH) {
+    var N = prices.length;
+    if (N < 48) return null;
+    var H = Math.max(3, Math.round(Math.min(mainPeriodH / dt, N / 5)));
+    var main = forecastFrom(prices, dt, H);
+    if (!main) return null;
+    var y = prices.map(Math.log), h, i;
+
+    var Wfit = Math.max(40, Math.floor(0.6 * N)), span = N - H - Wfit;
+    var nOrig = span >= 0 ? Math.min(12, span + 1) : 0;
+    var errs = [], hits = 0, dirN = 0, sumModel = 0, sumNaive = 0, tests = 0;
+    for (h = 0; h <= H; h++) errs.push([]);
+    for (var j = 0; j < nOrig; j++) {
+      var o = Wfit + (nOrig === 1 ? span : Math.round(j * span / (nOrig - 1)));
+      var fc = forecastFrom(prices.slice(o - Wfit, o), dt, H);
+      if (!fc) continue;
+      tests++;
+      var lastLog = y[o - 1];
+      for (h = 1; h <= H; h++) {
+        var actual = y[o - 1 + h], e = actual - fc.path[h];
+        errs[h].push(Math.abs(e));
+        sumModel += Math.abs(e);
+        sumNaive += Math.abs(actual - lastLog);
+      }
+      // direction checked at ¼, ½, ¾ and the full horizon (a full cycle ahead alone would return to the start)
+      [Math.round(H / 4), Math.round(H / 2), Math.round(3 * H / 4), H].forEach(function (hh) {
+        if (hh < 1) return;
+        var aMove = y[o - 1 + hh] - lastLog, fMove = fc.path[hh] - lastLog;
+        if (Math.abs(aMove) > 0.001) { dirN++; if ((aMove > 0) === (fMove > 0)) hits++; }
+      });
+    }
+    var tested = tests >= 6;
+    var band = [0];
+    for (h = 1; h <= H; h++) {
+      if (tested) band.push(quantile(errs[h], 0.8));
+      else {
+        var moves = [];
+        for (i = 0; i + h < N; i += Math.max(1, Math.floor(h / 2))) moves.push(Math.abs(y[i + h] - y[i]));
+        band.push(quantile(moves, 0.8));
+      }
+    }
+    var backStart = Math.max(0, N - Math.min(N, Math.max(3 * H, Math.round(2 * mainPeriodH / dt), 48)));
+    var fitBack = [];
+    for (i = backStart; i < N; i++) fitBack.push(main.fit(i));   // the fitted model itself (only the projection is pinned to the last close)
+    return {
+      H: H, dt: dt, backStart: backStart, center: main.path,
+      lo: main.path.map(function (v, h) { return v - band[h]; }),
+      hi: main.path.map(function (v, h) { return v + band[h]; }),
+      fitBack: fitBack,
+      tests: tests, tested: tested, hits: hits, dirN: dirN,
+      skill: sumNaive > 0 ? 1 - sumModel / sumNaive : 0
+    };
+  }
+
   function detrendLog(xs) {
     var N = xs.length, sx = 0, sy = 0, sxx = 0, sxy = 0, i;
     var y = xs.map(Math.log);
@@ -201,5 +317,5 @@
   function wrapDeg(x) { x = ((x + 180) % 360 + 360) % 360 - 180; return x === -180 ? 180 : x; }
 
   window.SineFourier = { testSignal: testSignal, analyze: analyze, linePath: linePath, barPaths: barPaths, fmtPeriod: fmtPeriod,
-    detrendLog: detrendLog, binPhase: binPhase, stft: stft, persistence: persistence, corr: corr, wrapDeg: wrapDeg };
+    detrendLog: detrendLog, binPhase: binPhase, stft: stft, persistence: persistence, project: project, harmonicFit: harmonicFit, corr: corr, wrapDeg: wrapDeg };
 })();

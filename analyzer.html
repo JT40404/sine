@@ -28,6 +28,7 @@
   </form>
   <a class="nav-link" href="/analyzer?mode=ecosystem" id="eco-link">Ecosystem pulse</a>
   <a class="nav-link" href="/learn">Learn</a>
+  <a class="social-btn icon-only" data-link="x" href="https://x.com/SineWaveSOL" target="_blank" rel="noopener" aria-label="SINE on X, @SineWaveSOL (opens in a new tab)"><span class="social-x" aria-hidden="true">X</span><span class="social-handle">@SineWaveSOL</span></a>
 </header>
 
 <main class="app-main">
@@ -136,6 +137,42 @@
         <canvas id="spec-canvas" class="chart-spec-only spec-canvas" width="860" height="280" role="img" aria-label="Spectrogram"></canvas>
         <p class="how chart-waves-only">Grey is the actual price with its long-run drift taken out, so you only see the swings. Green is those swings rebuilt from the three strongest rhythms. The closer green follows grey, the more of the movement is rhythmic rather than random. The white dot is the live price.</p>
         <p class="how chart-spec-only">Like an audio frequency analyzer, for price. Time runs left to right; slow rhythms are at the bottom and fast ones at the top (on a log scale, like audio); brighter means stronger. A steady bright band is a rhythm that has held the whole time. A band that fades, appears or drifts up or down is a rhythm weakening, emerging or changing speed. The dashed line marks the main rhythm (f₁); “f₁ ↓” means it’s slower than this view can show — use a longer candle interval.</p>
+      </figure>
+
+      <figure class="panel-2 chart" id="proj-fig" hidden>
+        <div class="top">
+          <figcaption>If the pattern holds <button type="button" class="tip" data-tip="projection" aria-label="What is a projection?">?</button></figcaption>
+          <div class="legend">
+            <span><svg width="20" height="4" aria-hidden="true"><line x1="0" y1="2" x2="20" y2="2" stroke="#ECE9E2" stroke-width="2"/></svg>price</span>
+            <span><svg width="20" height="4" aria-hidden="true"><line x1="0" y1="2" x2="20" y2="2" stroke="#7FE3B5" stroke-width="2" stroke-dasharray="4 3"/></svg>projection</span>
+            <span><svg width="20" height="10" aria-hidden="true"><rect width="20" height="10" rx="2" fill="#7FE3B5" fill-opacity="0.18"/></svg>likely range</span>
+          </div>
+        </div>
+        <svg viewBox="0 0 860 260" role="img" id="pj-svg" aria-label="Price with a projection of the current pattern">
+          <rect id="pj-shade" y="14" height="216" fill="#9DB4FF" fill-opacity="0.05"/>
+          <g stroke="#20242A"><line x1="64" y1="30" x2="848" y2="30"/><line x1="64" y1="122" x2="848" y2="122"/><line x1="64" y1="214" x2="848" y2="214"/></g>
+          <g fill="#8A8F98" font-family="IBM Plex Mono, monospace" font-size="11" text-anchor="end">
+            <text x="58" y="34" id="pj-ytop"></text><text x="58" y="126" id="pj-ymid"></text><text x="58" y="218" id="pj-ybot"></text>
+          </g>
+          <path id="pj-band" fill="#7FE3B5" fill-opacity="0.16"/>
+          <path id="pj-fit" fill="none" stroke="#7FE3B5" stroke-opacity="0.35" stroke-width="1.5"/>
+          <path id="pj-hist" fill="none" stroke="#ECE9E2" stroke-width="1.6"/>
+          <path id="pj-center" fill="none" stroke="#7FE3B5" stroke-width="2.2" stroke-dasharray="6 4"/>
+          <line id="pj-now" y1="14" y2="230" stroke="#8A8F98" stroke-dasharray="3 4"/>
+          <text id="pj-tag" y="26" fill="#9DB4FF" font-family="IBM Plex Mono, monospace" font-size="11">if the pattern holds →</text>
+          <g fill="#8A8F98" font-family="IBM Plex Mono, monospace" font-size="12">
+            <text x="64" y="250" id="pj-xstart"></text>
+            <text y="250" text-anchor="middle" id="pj-xnow">now</text>
+            <text x="848" y="250" text-anchor="end" id="pj-xend"></text>
+          </g>
+        </svg>
+        <div class="proj-stats">
+          <div><span class="label" id="pj-a-label">Projected high</span><strong id="pj-a">—</strong><span class="muted" id="pj-a-sub">—</span></div>
+          <div><span class="label" id="pj-b-label">Projected low</span><strong id="pj-b">—</strong><span class="muted" id="pj-b-sub">—</span></div>
+          <div><span class="label">Track record on this chart <button type="button" class="tip" data-tip="record" aria-label="What is the track record?">?</button></span><strong id="pj-record">—</strong><span class="muted" id="pj-skill">—</span></div>
+          <div class="verdict" id="pj-verdict" data-kind="none">—</div>
+        </div>
+        <p class="how">The dashed line extends the trend and the rhythms SINE found, starting from the last close. The shaded band is where price landed 8 times out of 10 when SINE made this same kind of projection at earlier points in this chart. The track record comes from re-running the method at those earlier points using only the data available then, and checking what happened next. A projection is a “what if”, not a prediction: news, big trades or a change in behaviour can break any pattern.</p>
       </figure>
 
       <div class="panel table-scroll detail-only">

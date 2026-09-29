@@ -92,6 +92,42 @@ The main chart toggles between **Waves**, which shows price against the rebuilt 
 
 Code: `stft()` and `persistence()` in `assets/fourier.js`; `drawSpectrogram()` in `assets/analyzer.js`.
 
+## Projections ("If the pattern holds")
+
+Below the main chart, SINE projects the current pattern forward and shows how well that has worked on the same chart.
+
+**The projection:**
+1. Find the top three rhythms with the FFT.
+2. Fit the trend plus those rhythms to log price by least squares.
+3. Extend the fit forward, pinned to the last close.
+4. The horizon is one main cycle, capped at a fifth of the window. The readout names the projected high and low, with timing and ranges.
+
+**The track record (walk-forward test):**
+1. At up to 12 earlier points in the chart, re-run the whole method using only the 60% of data before that point.
+2. Project forward from there and compare with what actually happened.
+3. Report:
+   - **direction right %**, checked at ¼, ½, ¾ and the full horizon
+   - **skill vs. "no change"**: 1 − (projection error ÷ error from assuming the price stays put)
+
+**Band.** The 80th percentile of those past misses at each step ahead. With fewer than 6 tests, it falls back to typical past price moves over the same number of steps, and the page says the projection is untested.
+
+**Verdict:**
+| Verdict | Condition |
+|---|---|
+| "worked reasonably well" | skill ≥ 0.15 and direction ≥ 60% |
+| "slight edge" | skill > 0 and direction ≥ 50% |
+| "no better than no change" | otherwise; the line turns grey |
+
+Checks on synthetic data:
+| Test series | Direction right | Skill |
+|---|---|---|
+| Genuine rhythm | 88% | 0.94 |
+| Rhythm plus heavy noise | 79% | 0.44 |
+| Random walk | 42% | −0.60 |
+| Rhythm that stopped halfway | 31% | strongly negative |
+
+Code: `project()`, `forecastFrom()` and `harmonicFit()` in `assets/fourier.js`; `drawProjection()` in `assets/analyzer.js`. The projection is computed just after each chart update so the animation isn't delayed.
+
 ## Candle intervals and real-time updates
 
 | Interval | Candles analyzed | Window | Page refreshes every | Needs |

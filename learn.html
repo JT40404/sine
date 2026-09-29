@@ -29,6 +29,7 @@
     <a href="/#readout">Sample readout</a>
     <a href="/learn" aria-current="page">Learn</a>
     <a data-link="docs" href="#">Docs</a>
+    <a class="social-btn" data-link="x" href="https://x.com/SineWaveSOL" target="_blank" rel="noopener" aria-label="SINE on X, @SineWaveSOL (opens in a new tab)"><span class="social-x" aria-hidden="true">X</span><span class="social-handle">@SineWaveSOL</span></a>
     <a class="btn" href="/analyzer">Launch analyzer</a>
   </nav>
 </header>
@@ -106,6 +107,15 @@
       <li><strong>Scattered patches with no band</strong> are noise.</li>
     </ul>
     <p>The dashed line marks the main rhythm. The written summary reports how consistently it showed up, and whether it has been getting stronger or fading lately.</p>
+    <h3>If the pattern holds (projection)</h3>
+    <p>Below the main chart, SINE takes the trend and rhythms it found and extends them forward, usually one full cycle ahead, starting from the last close. The dashed line shows where price would go <em>if the recent pattern simply continued</em>. The readout names the projected high and low and roughly when they would come.</p>
+    <p>Anyone can draw a line forward. What makes this one useful is the <strong>track record</strong> beside it. SINE goes back to up to 12 earlier points in the same chart. At each one it re-runs the whole method using only the data that existed then, projects forward, and checks what actually happened. The result tells you three things:</p>
+    <ul>
+      <li><strong>Direction right %</strong>: how often the projection pointed the right way.</li>
+      <li><strong>Accuracy vs. “no change”</strong>: whether it beat the simplest possible guess, that the price just stays where it is. If it can’t beat that, it has no edge.</li>
+      <li><strong>The shaded band</strong>: where price landed 8 times out of 10 relative to those past projections. It widens further out, because uncertainty grows with time.</li>
+    </ul>
+    <p>The verdict under the chart sums it up. <em>Worked reasonably well</em> means a real, measured edge on this chart so far. <em>No better than assuming the price stays put</em> means ignore the line. The projection turns grey in that case. Even a good track record only describes the past: the moment the pattern breaks, and the heatmap will often show it fading first, the projection stops being useful.</p>
     <h3>Spectrum (Detailed view)</h3>
     <p>This is the raw output of the Fourier transform: every rhythm in the data, slow on the left and fast on the right. One tall bar standing out means a clear dominant rhythm. Many similar small bars mean noise with no clear rhythm.</p>
     <h3>Ecosystem pulse</h3>
@@ -129,7 +139,7 @@
       <div class="num">02 · TIMING CONTEXT</div>
       <h3>Don’t buy the top of a swing</h3>
       <p>In a token with a strong rhythm, cycle position tells you whether price is early in a rise or near where past highs formed. It’s context for entries and exits, not a trigger.</p>
-      <div class="look"><b>LOOK FOR</b>Late in the rising half with a strong rhythm = elevated risk of buying near a local high.</div>
+      <div class="look"><b>LOOK FOR</b>Late in the rising half with a strong rhythm = elevated risk of buying near a local high. The projection panel shows where the next high and low would fall — and whether that has worked here before.</div>
     </li>
     <li class="panel">
       <div class="num">03 · RIGHT TIMEFRAME</div>
@@ -161,7 +171,7 @@
 <div class="caution" id="limits" style="flex-direction:column;align-items:flex-start;gap:8px">
   <div class="title" style="flex:none">What SINE can’t do</div>
   <ul class="limits">
-    <li>Predict prices. Rhythms describe the past, and markets are under no obligation to repeat them.</li>
+    <li>Predict prices. Projections show what happens <em>if</em> a pattern continues; markets are under no obligation to repeat it, and a good track record can end at any time.</li>
     <li>See news, listings, unlocks, hacks or whales. Any of these can override a rhythm instantly.</li>
     <li>Be reliable on short windows. A rhythm seen only once or twice could easily be coincidence.</li>
     <li>Handle thin markets well. In low-liquidity tokens a single trade can create a “pattern”.</li>

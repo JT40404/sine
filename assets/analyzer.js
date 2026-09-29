@@ -37,6 +37,12 @@
     if (Math.abs(deg) < 10) return "in phase";
     return (deg > 0 ? "leads " : "lags ") + fmtDur(Math.abs(deg) / 360 * periodH) + " (" + (deg > 0 ? "+" : "") + deg.toFixed(0) + "°)";
   };
+  function fmtUnit(v) {
+    if (!isFinite(v)) return "—";
+    if (state.units === "usd") return usd(v);
+    if (state.units === "index") return v.toFixed(2);
+    return Math.abs(v) >= 1000 ? v.toFixed(0) : v.toPrecision(5);
+  }
   var short = function (a) { return a.length > 16 ? a.slice(0, 6) + "…" + a.slice(-6) : a; };
 
   function status(msg, kind) {
@@ -212,6 +218,8 @@
     nyquist: ["Nyquist limit", "The fastest rhythm this candle size can detect (two candles per cycle). SINE only reports rhythms of at least four candles, to stay clear of noise at this edge."],
     detrended: ["What this chart shows", "Price with its overall drift up or down removed (on a log scale, so moves are in %). That leaves just the swings, which is what rhythm analysis works on."],
     position: ["Cycle position", "Where price sits in its main rhythm right now, moving forward in real time at the measured speed. It says where past highs and lows formed — not where the next ones must."],
+    projection: ["If the pattern holds", "SINE extends the current trend and rhythms forward from the last close. It’s a “what if the recent pattern continues”, not a prediction. The band shows how far off this kind of projection has typically been on this same chart."],
+    record: ["Track record", "SINE re-ran its projection at up to 12 earlier points in this chart, each time using only the data available then, and checked what happened next: how often the direction was right, and whether it beat simply assuming the price stays put."],
     spectrogram: ["Spectrogram (heatmap)", "The Fourier transform run again and again on a window sliding through time, like an audio frequency analyzer. It shows not just which rhythms exist but when: steady, emerging, fading or changing speed."],
     spectrum: ["Spectrum", "The result of the Fourier transform: how strong each possible rhythm is, from slow (left) to fast (right)."],
     correlation: ["Correlation", "From −1 to 1: how much two prices move together once their trends are removed. 0.7+ is close, around 0.4 is partial, near 0 is independent, negative means opposite."],
@@ -368,6 +376,78 @@
       (pers ? ": the main rhythm was clearly present in " + Math.round(pers.share * 100) + "% of the window." : "."));
   }
 
+  /* ================= projection ================= */
+  function projVerdict(pr) {
+    if (!pr.tested) return { kind: "none", text: "Not enough history to test this projection here. The band shows typical past price moves over this horizon instead — treat the line as illustration only." };
+    var dir = pr.dirN ? pr.hits / pr.dirN : 0;
+    if (pr.skill >= 0.15 && dir >= 0.6) return { kind: "good", text: "This kind of projection has worked reasonably well on this chart so far — but past patterns can stop at any time." };
+    if (pr.skill > 0 && dir >= 0.5) return { kind: "some", text: "A slight edge over assuming no change on this chart. Use it as a loose guide at most." };
+    return { kind: "none", text: "On this chart, this projection has done no better than assuming the price stays put. Don’t rely on it." };
+  }
+
+  /** Projected high and low within the horizon (h ≥ 1), with their ranges. */
+  function turningPoints(pr) {
+    var hiH = 1, loH = 1;
+    for (var h = 1; h <= pr.H; h++) { if (pr.center[h] > pr.center[hiH]) hiH = h; if (pr.center[h] < pr.center[loH]) loH = h; }
+    var last = Math.exp(pr.center[0]);
+    var pt = function (h) { var v = Math.exp(pr.center[h]); return { h: h, v: v, pct: (v / last - 1) * 100, lo: Math.exp(pr.lo[h]), hi: Math.exp(pr.hi[h]) }; };
+    return { high: pt(hiH), low: pt(loH), end: pt(pr.H), last: last };
+  }
+
+  function drawProjection(xs) {
+    var pr = view.proj, fig = $("proj-fig");
+    if (!pr) { fig.hidden = true; return; }
+    fig.hidden = false;
+    var hist = xs.slice(pr.backStart), nh = hist.length, H = pr.H, total = nh - 1 + H;
+    var X0 = 64, W = 784, Y0 = 30, YH = 184;
+    var up = pr.hi.map(Math.exp), dn = pr.lo.map(Math.exp), mid = pr.center.map(Math.exp), fit = pr.fitBack.map(Math.exp);
+    var all = hist.concat(up, dn), lo = Math.min.apply(null, all), hi = Math.max.apply(null, all), pad = (hi - lo) * 0.06 || hi * 0.01;
+    lo -= pad; hi += pad;
+    var X = function (i) { return X0 + i / total * W; }, Y = function (v) { return Y0 + (hi - v) / (hi - lo) * YH; };
+    var line = function (vals, off) { return vals.map(function (v, i) { return (i ? "L" : "M") + X(off + i).toFixed(1) + " " + Y(v).toFixed(1); }).join(" "); };
+    var nowX = X(nh - 1);
+    $("pj-hist").setAttribute("d", line(hist, 0));
+    $("pj-fit").setAttribute("d", line(fit, 0));
+    $("pj-center").setAttribute("d", line(mid, nh - 1));
+    var band = up.map(function (v, h) { return (h ? "L" : "M") + X(nh - 1 + h).toFixed(1) + " " + Y(v).toFixed(1); }).join(" ") + " " +
+      dn.slice().reverse().map(function (v, i) { return "L" + X(nh - 1 + H - i).toFixed(1) + " " + Y(v).toFixed(1); }).join(" ") + " Z";
+    $("pj-band").setAttribute("d", band);
+    $("pj-shade").setAttribute("x", nowX.toFixed(1));
+    $("pj-shade").setAttribute("width", (X0 + W - nowX).toFixed(1));
+    $("pj-now").setAttribute("x1", nowX.toFixed(1)); $("pj-now").setAttribute("x2", nowX.toFixed(1));
+    $("pj-xnow").setAttribute("x", nowX.toFixed(1));
+    $("pj-tag").setAttribute("x", (nowX + 6).toFixed(1));
+    $("pj-ytop").textContent = fmtUnit(hi); $("pj-ymid").textContent = fmtUnit((hi + lo) / 2); $("pj-ybot").textContent = fmtUnit(lo);
+    $("pj-xstart").textContent = "−" + fmtDur((nh - 1) * pr.dt);
+    $("pj-xend").textContent = "+" + fmtDur(H * pr.dt);
+
+    var v = projVerdict(pr), weak = v.kind === "none";
+    $("pj-center").setAttribute("stroke", weak ? "#8A8F98" : "#7FE3B5");
+    $("pj-band").setAttribute("fill", weak ? "#8A8F98" : "#7FE3B5");
+    var tp = turningPoints(pr), sg = function (x) { return (x >= 0 ? "+" : "") + x.toFixed(1) + "%"; };
+    var blk = function (id, label, q) {
+      $(id + "-label").textContent = label;
+      $(id).textContent = fmtUnit(q.v) + " (" + sg(q.pct) + ")";
+      $(id + "-sub").textContent = "in ~" + fmtDur(q.h * pr.dt) + " · range " + fmtUnit(q.lo) + " – " + fmtUnit(q.hi);
+    };
+    // show whichever turning point comes first on the left
+    if (tp.high.h <= tp.low.h) { blk("pj-a", "Projected high", tp.high); blk("pj-b", "Projected low", tp.low); }
+    else { blk("pj-a", "Projected low", tp.low); blk("pj-b", "Projected high", tp.high); }
+    var end = tp.end.v;
+    if (pr.tested) {
+      $("pj-record").textContent = "direction right " + Math.round(100 * pr.hits / Math.max(1, pr.dirN)) + "%";
+      $("pj-skill").textContent = pr.hits + " of " + pr.dirN + " checks across " + pr.tests + " past tests · " +
+        (pr.skill >= 0 ? Math.round(pr.skill * 100) + "% more accurate than “no change”" : Math.round(-pr.skill * 100) + "% less accurate than “no change”");
+    } else {
+      $("pj-record").textContent = "not enough history";
+      $("pj-skill").textContent = "use a shorter candle interval for a longer record";
+    }
+    $("pj-verdict").textContent = v.text;
+    $("pj-verdict").setAttribute("data-kind", v.kind);
+    $("pj-svg").setAttribute("aria-label", "Price over the last " + fmtDur((nh - 1) * pr.dt) + " with a projection " + fmtDur(H * pr.dt) + " ahead: " +
+      fmtUnit(end) + ", likely range " + fmtUnit(dn[H]) + " to " + fmtUnit(up[H]) + ". " + v.text);
+  }
+
   /* ================= plain-English summary ================= */
   var LEVELS = ["No clear rhythm", "Weak", "Moderate", "Strong", "Very strong"];
   function strengthOf(res) {
@@ -437,6 +517,23 @@
     } else r2 = trendTxt + " (Pasted data has no timestamps, so SINE can’t place it in the cycle in real time.)";
     out.push(["Right now", r2]);
 
+    var pr = view.proj;
+    if (pr && isFinite(pr.center[pr.H])) {
+      var pv = projVerdict(pr), tp = turningPoints(pr), sgn = function (x) { return (x >= 0 ? "+" : "") + x.toFixed(1) + "%"; };
+      var desc = function (q, word) { return word + " around " + fmtUnit(q.v) + " (" + sgn(q.pct) + ") in about " + fmtDur(q.h * pr.dt); };
+      var first = tp.high.h <= tp.low.h ? desc(tp.high, "peak") : desc(tp.low, "dip");
+      var second = tp.high.h <= tp.low.h ? desc(tp.low, "dip") : desc(tp.high, "peak");
+      var monotone = tp.high.h === pr.H || tp.low.h === pr.H ? (tp.end.pct >= 0 ? "drift up" : "drift down") : null;
+      var rp = "If the recent pattern holds, over the next " + fmtDur(pr.H * pr.dt) + " SINE’s projection would " +
+        (Math.min(tp.high.h, tp.low.h) === 1 && monotone ? monotone + " to around " + fmtUnit(tp.end.v) + " (" + sgn(tp.end.pct) + ")" : first + ", then " + second) +
+        ". The likely range widens the further out you look. ";
+      if (!pr.tested) rp += "There isn’t enough history here to test how reliable that is, so treat it as illustration only.";
+      else if (pv.kind === "good") rp += "Tested at " + pr.tests + " earlier points on this chart, this kind of projection got the direction right " + Math.round(100 * pr.hits / pr.dirN) + "% of the time and beat assuming no change — a useful guide while the pattern lasts.";
+      else if (pv.kind === "some") rp += "In past tests on this chart it only slightly beat assuming no change, so it’s a loose guide at most.";
+      else rp += "But in past tests on this chart it did no better than assuming the price stays put — don’t rely on it.";
+      out.push(["If it holds", rp]);
+    }
+
     // 3. market context
     if (ctx.vs && isFinite(ctx.vs.corr)) {
       var v = ctx.vs, lead = Math.abs(v.dphi) < 10 ? "peaks at about the same time as the market" :
@@ -495,7 +592,8 @@
     ["dom-uhz", "dom-simple", "dom-swing", "dom-period", "s-n", "s-df", "s-nyq", "s-exp", "s-snr", "cyc-text"].forEach(function (id) { $(id).textContent = "—"; });
     $("dom-uhz").removeAttribute("data-v");
     ["y-top", "y-bot", "x-start", "f-min", "f-max", "x-live"].forEach(function (id) { $(id).textContent = ""; });
-    view = { key: null, chart: null, bars: null, dom: null, cycle: null, stft: null, specImg: null };
+    view = { key: null, chart: null, bars: null, dom: null, cycle: null, stft: null, specImg: null, proj: null };
+    $("proj-fig").hidden = true;
     var cv = $("spec-canvas"); cv.getContext("2d").clearRect(0, 0, cv.width, cv.height);
   }
 
@@ -569,6 +667,14 @@
 
     try { view.stft = F.stft(xs, dtHours, p0.period); } catch (e) { view.stft = null; }
     view.res = res;
+    if (fresh) { view.proj = null; $("proj-fig").hidden = true; }
+    var projKey = opts.key, projXs = xs;
+    setTimeout(function () {
+      if (view.key !== projKey) return;
+      try { view.proj = F.project(projXs, dtHours, p0.period); } catch (e) { view.proj = null; }
+      drawProjection(projXs);
+      refreshSummary({});
+    }, 30);
     if (document.body.classList.contains("chart-spec")) drawSpectrogram(!fresh);
     else view.specImg = null;
 
@@ -683,6 +789,7 @@
         $("ticker").textContent = t.symbol ? "$" + t.symbol : "";
         document.title = (t.symbol ? "$" + t.symbol : short(state.ca)) + " · SINE analyzer";
         setSource("live market data", $("auto").checked);
+        state.units = "usd";
         var price = m.live ? m.live.c : t.priceUsd;
         setText("m-price", usd(price));
         setText("m-change", pct(t.change24h));
@@ -735,6 +842,7 @@
     getJSON("/api/top?weight=" + weight)
       .then(function (eco) {
         if (key !== "t:" + (state.basket === "top-equal" ? "equal" : "cap") || !isTop()) return;
+        state.units = "index";
         var wlabel = weight === "cap" ? "MARKET-CAP WEIGHTED, " + Math.round(eco.capLimit * 100) + "% CAP" : "EQUAL WEIGHTED";
         $("meta").textContent = "ECOSYSTEM PULSE · TOP " + eco.count + " SOLANA TOKENS · " + wlabel + " · HOURLY, 7 DAYS";
         $("title").textContent = "Solana market · Top " + eco.count;
@@ -798,6 +906,7 @@
         if (key !== "e:" + state.interval) return;
         $("meta").textContent = "ECOSYSTEM PULSE · " + eco.tokens.length + " TOKENS · " + eco.index.length + " × " + eco.intervalLabel + " CANDLES";
         $("title").textContent = "Solana ecosystem basket";
+        state.units = "index";
         $("ticker").textContent = "";
         document.title = "Ecosystem pulse · SINE analyzer";
         setSource("live · equal-weight index", $("auto").checked);
@@ -850,6 +959,7 @@
     if (xs.length < 16) return fail("Need at least 16 prices to resolve any cycles (found " + xs.length + ").");
     if (xs.some(function (v) { return v <= 0; })) return fail("Prices must be positive numbers.");
     if (xs.length > 4096) return fail("Keep it to 4,096 samples or fewer (found " + xs.length + ").");
+    state.units = "raw";
     var ownRes;
     try { ownRes = render(xs, dt, { key: "own:" + xs.length + ":" + xs[0] + ":" + xs[xs.length - 1] + ":" + dt }); } catch (e) { return fail(e.message); }
     showPanels(false, false, false, false);
