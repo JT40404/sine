@@ -12,7 +12,9 @@
   var reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
   var testText = F.testSignal().join("\n");
 
-  var state = { mode: "none", ca: "", interval: "15m", timer: null, busy: false, updatedAt: null, eco: null, secondsOK: false };
+  var state = { mode: "none", ca: "", interval: "15m", basket: "top50-cap", timer: null, busy: false, updatedAt: null, eco: null, secondsOK: false };
+  var BASKETS = ["top50-cap", "top50-equal", "core"];
+  var isTop = function () { return state.basket !== "core"; };
   var view = { key: null, chart: null, bars: null, dom: null, cycle: null };
 
   /* ================= formatting ================= */
@@ -54,8 +56,8 @@
   function setURL() {
     var p = new URLSearchParams();
     if (state.mode === "contract") p.set("ca", state.ca);
-    if (state.mode === "ecosystem") p.set("mode", "ecosystem");
-    if (state.mode === "contract" || state.mode === "ecosystem") p.set("interval", state.interval);
+    if (state.mode === "ecosystem") { p.set("mode", "ecosystem"); p.set("basket", state.basket); }
+    if (state.mode === "contract" || (state.mode === "ecosystem" && !isTop())) p.set("interval", state.interval);
     var q = p.toString();
     history.replaceState(null, "", location.pathname + (q ? "?" + q : ""));
   }
@@ -276,10 +278,60 @@
     return res;
   }
 
-  function showPanels(market, versus, basket) {
+  function showPanels(market, versus, basket, ecoStrip) {
     $("market").hidden = !market;
     $("versus").hidden = !versus;
     $("basket").hidden = !basket;
+    $("eco-strip").hidden = !ecoStrip;
+  }
+
+  /** Basket/interval controls depend on the mode. */
+  function syncControls() {
+    var eco = state.mode === "ecosystem";
+    $("basket-label").hidden = !eco;
+    $("basket-select").hidden = !eco;
+    $("basket-select").value = state.basket;
+    var locked = eco && isTop();
+    $("interval").disabled = locked;
+    $("interval").value = locked ? "1h" : state.interval;
+    $("interval").title = locked ? "The Top 50 index is built from CoinGecko's hourly 7-day price history." : "";
+  }
+
+  /** columns: [{ label, width }]; rows: arrays of cells (string or { text, href }). */
+  function basketTable(columns, rows) {
+    var tpl = columns.map(function (c) { return c.width || "1fr"; }).join(" ");
+    var head = $("basket-head");
+    head.textContent = "";
+    head.style.gridTemplateColumns = tpl;
+    columns.forEach(function (c) { var el = document.createElement("span"); el.textContent = c.label; head.appendChild(el); });
+    var body = $("basket-rows");
+    body.textContent = "";
+    rows.forEach(function (cells) {
+      var row = document.createElement("div");
+      row.className = "row";
+      row.style.gridTemplateColumns = tpl;
+      cells.forEach(function (c) {
+        var el;
+        if (c && c.href) { el = document.createElement("a"); el.href = c.href; el.textContent = c.text; }
+        else { el = document.createElement("span"); el.textContent = c && c.text !== undefined ? c.text : c; if (c && c.cls) el.className = c.cls; }
+        var cell = document.createElement("span");
+        cell.appendChild(el);
+        row.appendChild(cell);
+      });
+      body.appendChild(row);
+    });
+  }
+
+  /** Per-token cycle stats against an index series (same length, same timestamps). */
+  function tokenVsIndex(closes, index, dtHours, k0, P0, phIdx, dIdx) {
+    var d = F.detrendLog(closes), own = "—", share = "—";
+    try {
+      var r = F.analyze(closes, dtHours);
+      if (r.peaks[0]) own = fmtDur(r.peaks[0].period);
+      var varD = d.reduce(function (s, v) { return s + v * v; }, 0) / d.length;
+      if (r.bins[k0 + 1] && varD) share = (100 * (r.bins[k0 - 1].pw + r.bins[k0].pw + r.bins[k0 + 1].pw) / varD).toFixed(1) + "%";
+    } catch (e) {}
+    return { own: own, share: share, corr: F.corr(d, dIdx).toFixed(2), phase: leadLag(F.wrapDeg(F.binPhase(d, k0) - phIdx), P0) };
   }
 
   /* ================= contract lens ================= */
@@ -328,30 +380,92 @@
         $("m-pool").href = t.topPool ? "https://www.geckoterminal.com/solana/pools/" + t.topPool.address : "#";
         state.updatedAt = Date.parse(m.updatedAt);
         var res = render(m.closes, m.intervalHours, { key: key, timestamps: m.timestamps, sec: m.intervalSec, live: m.live });
-        showPanels(true, true, false);
+        showPanels(true, true, false, false);
         status("");
 
         if (m.intervalSec < 60) {
           ["v-corr", "v-phase", "v-period"].forEach(function (id) { $(id).textContent = "1-min candles and up"; });
           return;
         }
-        var fresh = state.eco && state.eco.interval === state.interval && Date.now() - state.eco.at < 300000;
-        var got = fresh ? Promise.resolve(state.eco.data) : getJSON("/api/ecosystem?interval=" + state.interval).then(function (e) {
-          state.eco = { interval: state.interval, at: Date.now(), data: e };
+        var useTop = state.interval === "1h";
+        var ecoKey = useTop ? "top50" : state.interval;
+        $("v-corr-label").textContent = "Correlation with " + (useTop ? "Top 50 index" : "core basket index");
+        $("v-phase-label").textContent = "Phase vs. " + (useTop ? "Top 50" : "core basket") + " at this token’s f₁";
+        $("v-period-label").textContent = (useTop ? "Top 50" : "Core basket") + "’s own dominant period";
+        var fresh = state.eco && state.eco.key === ecoKey && Date.now() - state.eco.at < 300000;
+        var got = fresh ? Promise.resolve(state.eco.data) : getJSON(useTop ? "/api/top50?weight=cap" : "/api/ecosystem?interval=" + state.interval).then(function (e) {
+          state.eco = { key: ecoKey, at: Date.now(), data: e };
           return e;
         });
         return got.then(function (eco) { compareToBasket(m, eco, res); })
           .catch(function () { ["v-corr", "v-phase", "v-period"].forEach(function (id) { $(id).textContent = "unavailable"; }); });
       })
       .catch(function (e) {
-        if (!quiet) { clear(); showPanels(false, false, false); setSource("no data", false); }
+        if (!quiet) { clear(); showPanels(false, false, false, false); setSource("no data", false); }
         status(e.message);
       })
       .then(function () { state.busy = false; $("app-grid").classList.remove("loading"); });
   }
 
   /* ================= ecosystem pulse ================= */
-  function loadEcosystem(quiet) {
+  function loadEcosystem(quiet) { return isTop() ? loadTop50(quiet) : loadCore(quiet); }
+
+  function loadTop50(quiet) {
+    if (state.busy) return;
+    state.busy = true;
+    var weight = state.basket === "top50-equal" ? "equal" : "cap";
+    var key = "t:" + weight;
+    if (!quiet) { status("Loading the top 50 Solana tokens…", "info"); $("app-grid").classList.add("loading"); }
+    getJSON("/api/top50?weight=" + weight)
+      .then(function (eco) {
+        if (key !== "t:" + (state.basket === "top50-equal" ? "equal" : "cap") || !isTop()) return;
+        var wlabel = weight === "cap" ? "MARKET-CAP WEIGHTED, " + Math.round(eco.capLimit * 100) + "% CAP" : "EQUAL WEIGHTED";
+        $("meta").textContent = "ECOSYSTEM PULSE · TOP " + eco.count + " SOLANA TOKENS · " + wlabel + " · HOURLY, 7 DAYS";
+        $("title").textContent = "Solana market · Top " + eco.count;
+        $("ticker").textContent = "";
+        document.title = "Solana Top " + eco.count + " · SINE analyzer";
+        setSource("live · " + eco.source, $("auto").checked);
+        state.updatedAt = Date.parse(eco.updatedAt);
+        var res = render(eco.index, 1, { key: key, timestamps: eco.timestamps, sec: 3600, live: eco.live });
+        showPanels(false, false, true, true);
+
+        var st = eco.stats, trendDay = (Math.exp(res.trendB * 24) - 1) * 100;
+        setText("e-level", eco.live.c.toFixed(2));
+        setText("e-24h", pct(st.change24h));
+        $("e-24h").className = st.change24h >= 0 ? "up" : "down";
+        setText("e-7d", pct(st.change7d));
+        $("e-7d").className = st.change7d >= 0 ? "up" : "down";
+        setText("e-breadth", st.up24h + " up · " + st.down24h + " down");
+        setText("e-trend", (trendDay >= 0 ? "Up " : "Down ") + Math.abs(trendDay).toFixed(2) + "%/day");
+        $("e-trend").className = trendDay >= 0 ? "up" : "down";
+
+        var dIdx = F.detrendLog(eco.index), k0 = res.peaks[0].k, P0 = res.peaks[0].period, phIdx = F.binPhase(dIdx, k0);
+        var rows = eco.tokens.map(function (t) {
+          var v = tokenVsIndex(t.closes, eco.index, 1, k0, P0, phIdx, dIdx);
+          var sym = t.mint ? { text: "$" + t.symbol, href: "/analyzer?ca=" + encodeURIComponent(t.mint) + "&interval=1h" } : "$" + t.symbol;
+          return [String(t.rank || "—"), sym, (t.weight * 100).toFixed(1) + "%",
+            { text: pct(t.change24h), cls: t.change24h === null ? "" : t.change24h >= 0 ? "up" : "down" },
+            v.own, v.corr, v.phase];
+        });
+        $("basket-title").textContent = "The " + eco.count + " tokens in the index";
+        basketTable([
+          { label: "rank", width: "0.5fr" }, { label: "token", width: "1fr" }, { label: "weight", width: "0.8fr" },
+          { label: "24h", width: "0.8fr" }, { label: "own f₁ period", width: "1fr" }, { label: "correlation", width: "0.8fr" },
+          { label: "phase vs. index f₁", width: "1.5fr" }], rows);
+        var note = "Ranked by market cap from CoinGecko’s Solana ecosystem list; stablecoins, wrapped and bridged assets and liquid-staking tokens are excluded. " +
+          (weight === "cap" ? "Weights follow market cap, capped at " + Math.round(eco.capLimit * 100) + "% per token so SOL doesn’t become the whole index. " : "Every token counts equally. ") +
+          "Correlation is between detrended log prices; phase compares each token to the index at its dominant frequency (" + fmtDur(P0) + "). Click a token to open it in the contract lens.";
+        $("basket-note").textContent = note;
+        status("");
+      })
+      .catch(function (e) {
+        if (!quiet) { clear(); showPanels(false, false, false, false); setSource("no data", false); }
+        status(e.message);
+      })
+      .then(function () { state.busy = false; $("app-grid").classList.remove("loading"); });
+  }
+
+  function loadCore(quiet) {
     if (state.busy) return;
     if (SECONDS[state.interval] < 60) { state.interval = "1m"; $("interval").value = "1m"; setURL(); }
     state.busy = true;
@@ -367,33 +481,22 @@
         setSource("live · equal-weight index", $("auto").checked);
         state.updatedAt = Date.parse(eco.updatedAt);
         var res = render(eco.index, eco.intervalHours, { key: key, timestamps: eco.timestamps, sec: eco.intervalSec });
-        showPanels(false, false, true);
+        showPanels(false, false, true, false);
 
-        var dIdx = F.detrendLog(eco.index), k0 = res.peaks[0].k, P0 = res.peaks[0].period;
-        var phIdx = F.binPhase(dIdx, k0);
-        var rows = $("basket-rows");
-        rows.textContent = "";
-        eco.tokens.forEach(function (t) {
-          var d = F.detrendLog(t.closes), own = "—", share = "—";
-          try {
-            var r = F.analyze(t.closes, eco.intervalHours);
-            if (r.peaks[0]) own = fmtDur(r.peaks[0].period);
-            var varD = d.reduce(function (s, v) { return s + v * v; }, 0) / d.length;
-            if (r.bins[k0 + 1] && varD) share = (100 * (r.bins[k0 - 1].pw + r.bins[k0].pw + r.bins[k0 + 1].pw) / varD).toFixed(1) + "%";
-          } catch (e) {}
-          var row = document.createElement("div");
-          row.className = "row";
-          ["$" + t.symbol, own, share, F.corr(d, dIdx).toFixed(2), leadLag(F.wrapDeg(F.binPhase(d, k0) - phIdx), P0)]
-            .forEach(function (c) { var el = document.createElement("span"); el.textContent = c; row.appendChild(el); });
-          rows.appendChild(row);
-        });
+        var dIdx = F.detrendLog(eco.index), k0 = res.peaks[0].k, P0 = res.peaks[0].period, phIdx = F.binPhase(dIdx, k0);
+        $("basket-title").textContent = "Core basket tokens against the index";
+        basketTable([{ label: "token" }, { label: "own f₁ period" }, { label: "share of index f₁" }, { label: "correlation" }, { label: "phase vs. index f₁", width: "1.4fr" }],
+          eco.tokens.map(function (t) {
+            var v = tokenVsIndex(t.closes, eco.index, eco.intervalHours, k0, P0, phIdx, dIdx);
+            return [{ text: "$" + t.symbol, href: "/analyzer?ca=" + encodeURIComponent(t.mint) + "&interval=" + state.interval }, v.own, v.share, v.corr, v.phase];
+          }));
         var note = "Correlation is between detrended log prices. Phase compares each token to the index at the index’s dominant frequency (" + fmtDur(P0) + "): “leads” means the token tends to peak earlier.";
         if (eco.dropped && eco.dropped.length) note += " Left out this time: " + eco.dropped.map(function (d) { return d.symbol; }).join(", ") + ".";
         $("basket-note").textContent = note;
         status("");
       })
       .catch(function (e) {
-        if (!quiet) { clear(); showPanels(false, false, false); setSource("no data", false); }
+        if (!quiet) { clear(); showPanels(false, false, false, false); setSource("no data", false); }
         status(e.message);
       })
       .then(function () { state.busy = false; $("app-grid").classList.remove("loading"); });
@@ -410,6 +513,7 @@
   function runOwn(isTest) {
     stopPolling();
     state.mode = isTest ? "none" : "own";
+    syncControls();
     state.updatedAt = null;
     setURL();
     $("error").textContent = "";
@@ -420,7 +524,7 @@
     if (xs.some(function (v) { return v <= 0; })) return fail("Prices must be positive numbers.");
     if (xs.length > 4096) return fail("Keep it to 4,096 samples or fewer (found " + xs.length + ").");
     try { render(xs, dt, { key: "own:" + xs.length + ":" + xs[0] + ":" + xs[xs.length - 1] + ":" + dt }); } catch (e) { return fail(e.message); }
-    showPanels(false, false, false);
+    showPanels(false, false, false, false);
     $("meta").textContent = isTest ? "CONTRACT LENS · DEMO" : "YOUR DATA · " + xs.length + " SAMPLES";
     $("title").textContent = isTest ? "Paste a contract address" : "Your price series";
     $("ticker").textContent = "";
@@ -441,7 +545,7 @@
     $("source").classList.toggle("is-live", live);
     if (!live) return;
     var ms = POLL[state.interval];
-    if (state.mode === "ecosystem") ms = Math.max(60000, ms);
+    if (state.mode === "ecosystem") ms = isTop() ? 120000 : Math.max(60000, ms);
     state.timer = setInterval(tick, ms);
   }
   document.addEventListener("visibilitychange", function () { if (!document.hidden) tick(); });
@@ -453,6 +557,7 @@
   }, 1000);
 
   function go() {
+    syncControls();
     setURL();
     if (state.mode === "contract") loadContract(false);
     else if (state.mode === "ecosystem") loadEcosystem(false);
@@ -470,9 +575,10 @@
   $("eco-link").addEventListener("click", function (e) { e.preventDefault(); state.mode = "ecosystem"; go(); });
   $("interval").addEventListener("change", function () {
     state.interval = $("interval").value;
-    if (state.mode === "ecosystem" && SECONDS[state.interval] < 60) status("Ecosystem pulse uses 1-minute candles and longer — switched to 1 min.", "info");
+    if (state.mode === "ecosystem" && !isTop() && SECONDS[state.interval] < 60) status("Ecosystem pulse uses 1-minute candles and longer — switched to 1 min.", "info");
     if (state.mode === "contract" || state.mode === "ecosystem") go();
   });
+  $("basket-select").addEventListener("change", function () { state.basket = $("basket-select").value; if (state.mode === "ecosystem") go(); });
   $("auto").addEventListener("change", function () { startPolling(); if ($("auto").checked) tick(); });
   $("run").addEventListener("click", function () { runOwn(false); });
   $("load-test").addEventListener("click", function () { $("series").value = testText; $("dt").value = "0.25"; runOwn(true); });
@@ -491,6 +597,8 @@
   var iv = params.get("interval") || legacy[params.get("window") || ""] || "15m";
   if (INTERVAL_IDS.indexOf(iv) < 0) iv = "15m";
   var ca = (params.get("ca") || "").trim();
+  var bk = params.get("basket");
+  if (bk && BASKETS.indexOf(bk) >= 0) state.basket = bk;
   $("series").value = testText;
   applyCapabilities(false);
 

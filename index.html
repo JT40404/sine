@@ -52,15 +52,12 @@
       </form>
       <form class="form-block" data-panel="eco" action="/analyzer" method="get" hidden>
         <input type="hidden" name="mode" value="ecosystem">
-        <label class="label" for="win">Candle interval for the Solana basket</label>
+        <label class="label" for="win">Which market to read</label>
         <div class="input-row">
-          <select class="field" id="win" name="interval">
-            <option value="1m">1 min candles · last 12 hours</option>
-            <option value="5m">5 min candles · last 2 days</option>
-            <option value="15m" selected>15 min candles · last 7 days</option>
-            <option value="1h">1 hour candles · last 30 days</option>
-            <option value="4h">4 hour candles · last 90 days</option>
-            <option value="1d">1 day candles · last year</option>
+          <select class="field" id="win" name="basket">
+            <option value="top50-cap" selected>Top 50 Solana tokens · market-cap weighted</option>
+            <option value="top50-equal">Top 50 Solana tokens · equal weighted</option>
+            <option value="core">Core 6 · on-chain candles, 1 min to 1 day</option>
           </select>
           <button class="btn" type="submit">Read the pulse</button>
         </div>
@@ -126,9 +123,9 @@
     <article class="panel eco">
       <div class="kicker">ECOSYSTEM PULSE</div>
       <h3>The broad Solana market</h3>
-      <p>Analyzes a basket of liquid Solana tokens to find the rhythms the whole ecosystem shares.</p>
+      <p>Tracks the top 50 Solana tokens by market cap as one index — stablecoins, wrapped assets and liquid-staking tokens left out — to find the rhythms the whole market shares.</p>
       <ul>
-        <li><span class="tick">~</span><span>Shared dominant cycles across the basket</span></li>
+        <li><span class="tick">~</span><span>Market trend, breadth and shared dominant cycles</span></li>
         <li><span class="tick">~</span><span>Phase alignment — which tokens peak together</span></li>
         <li><span class="tick">~</span><span>Spectrum shifts as market regimes change</span></li>
       </ul>

@@ -256,3 +256,11 @@ details.own .data-panel { border: 0; border-top: 1px solid var(--line-soft); bor
   .live-ring { display: none; }
 }
 select option:disabled { color: #5C616A; }
+
+.basket-table .row { padding: 14px 24px; font-size: 14px; }
+.basket-table { min-width: 760px; }
+.basket-table a { color: var(--text); text-decoration: none; border-bottom: 1px dotted var(--dim); }
+.basket-table a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+#basket-rows { max-height: 560px; overflow-y: auto; }
+.panel-sub { padding: 6px 24px 0; font-size: 13px; color: var(--muted); }
+select:disabled { opacity: 0.6; cursor: not-allowed; }

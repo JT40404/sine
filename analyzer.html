@@ -37,6 +37,12 @@
       <h1><span id="title">Paste a contract address</span> <span class="ticker" id="ticker"></span></h1>
     </div>
     <div class="report-controls">
+      <label class="label" for="basket-select" id="basket-label" hidden>Basket</label>
+      <select class="field" id="basket-select" hidden>
+        <option value="top50-cap">Top 50 · market-cap weighted</option>
+        <option value="top50-equal">Top 50 · equal weighted</option>
+        <option value="core">Core 6 · on-chain candles</option>
+      </select>
       <label class="label" for="interval">Candle interval</label>
       <select class="field" id="interval">
         <option value="1s" data-pro>1 sec</option>
@@ -61,6 +67,14 @@
     <div><dt>Liquidity</dt><dd id="m-liq">—</dd></div>
     <div><dt>24h volume</dt><dd id="m-vol">—</dd></div>
     <div><dt>Top pool</dt><dd><a id="m-pool" href="#" target="_blank" rel="noopener">—</a></dd></div>
+  </dl>
+
+  <dl class="panel market" id="eco-strip" hidden>
+    <div><dt>Index level (live)</dt><dd id="e-level">—</dd></div>
+    <div><dt>24h</dt><dd id="e-24h">—</dd></div>
+    <div><dt>7 days</dt><dd id="e-7d">—</dd></div>
+    <div><dt>Breadth (24h)</dt><dd id="e-breadth">—</dd></div>
+    <div><dt>Trend</dt><dd id="e-trend">—</dd></div>
   </dl>
 
   <div class="app-grid" id="app-grid">
@@ -100,10 +114,10 @@
       </div>
 
       <div class="panel" id="basket" hidden>
-        <div class="panel-title">Basket tokens against the index</div>
+        <div class="panel-title" id="basket-title">Basket tokens against the index</div>
         <div class="table-scroll">
-          <div class="table cols-5b">
-            <div class="row head"><span>token</span><span>own f₁ period</span><span>share of f₁</span><span>correlation</span><span>phase vs. index f₁</span></div>
+          <div class="table basket-table">
+            <div class="row head" id="basket-head"></div>
             <div id="basket-rows"></div>
           </div>
         </div>
@@ -172,9 +186,9 @@
       <div class="panel stats" id="versus" hidden>
         <h2>Against the ecosystem</h2>
         <dl>
-          <div><dt>Correlation with basket index</dt><dd id="v-corr">—</dd></div>
-          <div><dt>Phase vs. basket at this token’s f₁</dt><dd id="v-phase">—</dd></div>
-          <div><dt>Basket’s own dominant period</dt><dd id="v-period">—</dd></div>
+          <div><dt id="v-corr-label">Correlation with basket index</dt><dd id="v-corr">—</dd></div>
+          <div><dt id="v-phase-label">Phase vs. basket at this token’s f₁</dt><dd id="v-phase">—</dd></div>
+          <div><dt id="v-period-label">Basket’s own dominant period</dt><dd id="v-period">—</dd></div>
         </dl>
       </div>
 

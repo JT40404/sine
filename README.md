@@ -9,11 +9,12 @@ config.js             ← official token address + social links
 assets/               styles, Fourier core, page scripts, favicon
 api/
   market.js           GET /api/market?address=<mint>&interval=1s…1d
-  ecosystem.js        GET /api/ecosystem?interval=1m…1d
+  top50.js            GET /api/top50?weight=cap|equal   (Top 50 Solana market index)
+  ecosystem.js        GET /api/ecosystem?interval=1m…1d (Core 6 on-chain basket)
   token.js            GET /api/token?address=<mint>
   health.js           GET /api/health
   _lib/gecko.js       data-provider client, windows, caching
-  _lib/basket.js      ← tokens in the "Solana ecosystem" basket
+  _lib/basket.js      ← Top 50 rules (size, exclusions, weight cap) + Core 6 tokens
 vercel.json           clean URLs, function timeout, security headers
 .env.example          environment variables (set these in Vercel, not in a file)
 ```
@@ -32,6 +33,34 @@ vercel.json           clean URLs, function timeout, security headers
 ## Set the official token
 
 In `config.js`, replace `PASTE_SINE_MINT_ADDRESS_HERE` with the SINE mint address. The landing page then shows the address with a copy button. Once the token has a trading pool, it also shows live price, 24h change, liquidity and volume, refreshed every minute.
+
+## Top 50 Solana market index
+
+**Ecosystem pulse** opens on the **Top 50** index by default. It is built as follows:
+
+1. **Membership.** On every refresh, the API pulls CoinGecko's *Solana ecosystem* ranking by market cap and walks down it until it has 50 eligible tokens. It skips:
+   - stablecoins, liquid-staking tokens, and wrapped or bridged assets (by CoinGecko category, plus a stablecoin price check)
+   - anything without a Solana contract address
+
+   Tokens join and leave automatically as the rankings change. The rules are in `api/_lib/basket.js` (`TOP`).
+2. **Prices.** All 50 tokens come from **one** API call: CoinGecko's hourly 7-day price history for each token. That's 168 hourly points per token, so this index runs on **1-hour candles over 7 days**, and the interval picker is locked while it's selected.
+3. **Index.** Two weighting options:
+   - **Market-cap weighted** (default). Weights follow market cap, but each token is capped at 20% so SOL doesn't become the whole index.
+   - **Equal weighted.** Every token counts the same.
+4. **Live.** The index level is recalculated from current prices every 2 minutes, and a live dot shows it on the chart.
+
+The page shows:
+- the index level, 24h and 7-day change
+- breadth (how many of the 50 were up or down in the last 24h)
+- the trend slope
+- the Fourier readout
+- a table of all 50 tokens with weight, 24h change, each token's own dominant cycle, correlation with the index, and whether it leads or lags the index
+
+Click any token to open it in the contract lens.
+
+In the contract lens at **1-hour** candles, a token is compared against the Top 50 index. At other intervals it is compared against the **Core 6** on-chain basket, which also remains available as a basket option at any interval from 1 minute up.
+
+**API usage.** A Top 50 refresh costs 1 call. Category and contract-address lookups add about 6 calls, cached for 24 hours. The free Demo plan also has a **monthly** call limit, so check your usage in the CoinGecko dashboard once the site gets traffic.
 
 ## Candle intervals and real-time updates
 

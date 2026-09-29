@@ -1,5 +1,20 @@
 /**
- * The "Solana ecosystem" basket used by Ecosystem Pulse.
+ * Top-N market basket (Ecosystem Pulse → "Top 50").
+ * Membership is recomputed live from CoinGecko's Solana-ecosystem ranking by market cap.
+ * Coins in excludeCategories are skipped so the index tracks tradable Solana assets rather
+ * than dollar pegs or SOL derivatives. Unknown category ids are ignored.
+ */
+export const TOP = {
+  size: 50,
+  candidates: 150,               // how many ranked coins to scan to find `size` eligible ones
+  category: 'solana-ecosystem',
+  excludeCategories: ['stablecoins', 'liquid-staking-tokens', 'wrapped-tokens', 'bridged-tokens', 'tokenized-gold'],
+  alwaysExclude: [],             // CoinGecko ids to skip by hand, e.g. ['some-coin-id']
+  capLimit: 0.2,                 // max weight of any one token in the market-cap index
+};
+
+/**
+ * "Core" on-chain basket (Ecosystem Pulse → "Core 6").
  * Liquid, established Solana tokens. Edit freely — verify every mint before deploying.
  * Keep it to ~8 tokens: each one costs an upstream API call when the cache is cold.
  */

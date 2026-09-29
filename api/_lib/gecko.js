@@ -48,12 +48,15 @@ export const isMint = (s) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s || '');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const num = (v) => (v === null || v === undefined || v === '' || !isFinite(Number(v)) ? null : Number(v));
 
+const CG_BASE = KEY && PRO ? 'https://pro-api.coingecko.com/api/v3' : 'https://api.coingecko.com/api/v3';
+export const CG_SOURCE = !KEY ? 'CoinGecko (public)' : PRO ? 'CoinGecko Pro' : 'CoinGecko Demo';
+
 // Per-instance memory cache (warm functions reuse it); the CDN cache does the heavy lifting.
 const memo = new Map();
 
-export async function gecko(path, ttlMs = 0) {
+async function getJSON(url, ttlMs) {
   if (ttlMs) {
-    const hit = memo.get(path);
+    const hit = memo.get(url);
     if (hit && hit.exp > Date.now()) return hit.value;
   }
   const headers = { accept: 'application/json' };
@@ -61,16 +64,21 @@ export async function gecko(path, ttlMs = 0) {
 
   let wait = 1500;
   for (let attempt = 0; attempt < 4; attempt++) {
-    const res = await fetch(BASE + path, { headers });
+    const res = await fetch(url, { headers });
     if (res.status === 429) { if (attempt < 3) { await sleep(wait); wait *= 2; } continue; }
-    if (res.status === 404) throw new HttpError(404, 'Token or pool not found on GeckoTerminal.');
+    if (res.status === 404) throw new HttpError(404, 'Token or pool not found.');
     if (!res.ok) throw new HttpError(502, `Market data provider returned ${res.status}.`);
     const value = await res.json();
-    if (ttlMs) memo.set(path, { value, exp: Date.now() + ttlMs });
+    if (ttlMs) memo.set(url, { value, exp: Date.now() + ttlMs });
     return value;
   }
   throw new HttpError(503, 'Market data provider is rate-limiting requests. Try again in a minute.');
 }
+
+/** On-chain DEX data (pools, OHLCV). */
+export const gecko = (path, ttlMs = 0) => getJSON(BASE + path, ttlMs);
+/** CoinGecko aggregated market data (rankings, market caps, sparklines). */
+export const cg = (path, ttlMs = 0) => getJSON(CG_BASE + path, ttlMs);
 
 function poolFromIncluded(p) {
   const a = p.attributes || {};
