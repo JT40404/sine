@@ -27,6 +27,7 @@
     <button class="btn" type="submit">Analyze</button>
   </form>
   <a class="nav-link" href="/analyzer?mode=ecosystem" id="eco-link">Ecosystem pulse</a>
+  <a class="nav-link" href="/learn">Learn</a>
 </header>
 
 <main class="app-main">
@@ -38,6 +39,10 @@
       <h1><span id="title">Paste a contract address</span> <span class="ticker" id="ticker"></span></h1>
     </div>
     <div class="report-controls">
+      <div class="segmented" role="group" aria-label="Detail level">
+        <button type="button" data-view="simple" aria-pressed="true">Simple</button>
+        <button type="button" data-view="detailed" aria-pressed="false">Detailed</button>
+      </div>
       <label class="label" for="basket-select" id="basket-label" hidden>Basket</label>
       <select class="field" id="basket-select" hidden>
         <option value="top-cap">Top 20 · market-cap weighted</option>
@@ -65,30 +70,53 @@
   <dl class="panel market" id="market" hidden>
     <div><dt>Price</dt><dd id="m-price">—</dd></div>
     <div><dt>24h change</dt><dd id="m-change">—</dd></div>
-    <div><dt>Liquidity</dt><dd id="m-liq">—</dd></div>
-    <div><dt>24h volume</dt><dd id="m-vol">—</dd></div>
+    <div><dt>Liquidity <button type="button" class="tip" data-tip="liquidity" aria-label="What is liquidity?">?</button></dt><dd id="m-liq">—</dd></div>
+    <div><dt>24h volume <button type="button" class="tip" data-tip="volume" aria-label="What is volume?">?</button></dt><dd id="m-vol">—</dd></div>
     <div><dt>Top pool</dt><dd><a id="m-pool" href="#" target="_blank" rel="noopener">—</a></dd></div>
   </dl>
 
   <dl class="panel market" id="eco-strip" hidden>
-    <div><dt>Index level (live)</dt><dd id="e-level">—</dd></div>
+    <div><dt>Index level (live) <button type="button" class="tip" data-tip="index" aria-label="What is the index level?">?</button></dt><dd id="e-level">—</dd></div>
     <div><dt>24h</dt><dd id="e-24h">—</dd></div>
     <div><dt>7 days</dt><dd id="e-7d">—</dd></div>
-    <div><dt>Breadth (24h)</dt><dd id="e-breadth">—</dd></div>
-    <div><dt>Trend</dt><dd id="e-trend">—</dd></div>
+    <div><dt>Breadth (24h) <button type="button" class="tip" data-tip="breadth" aria-label="What is breadth?">?</button></dt><dd id="e-breadth">—</dd></div>
+    <div><dt>Trend <button type="button" class="tip" data-tip="trend" aria-label="What is trend?">?</button></dt><dd id="e-trend">—</dd></div>
   </dl>
+
+  <div class="panel summary" id="summary" hidden>
+    <div class="summary-head">
+      <h2>What this means</h2>
+      <div class="strength" id="strength" data-level="0">
+        <span class="strength-label">Rhythm strength <button type="button" class="tip" data-tip="strength" aria-label="What is rhythm strength?">?</button></span>
+        <span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        <strong id="strength-label">—</strong>
+      </div>
+    </div>
+    <div class="summary-body" id="summary-body" aria-live="polite"></div>
+    <p class="summary-foot">Rhythms describe what price <em>has</em> done and can break without warning. This is context for your own judgement, not a prediction or financial advice. <a href="/learn">How to read SINE →</a></p>
+  </div>
 
   <div class="app-grid" id="app-grid">
     <div class="app-col">
       <figure class="panel-2 chart" id="chart-fig">
         <div class="top">
-          <figcaption>Detrended log price vs. reconstructed signal</figcaption>
-          <div class="legend">
-            <span><svg width="20" height="4" aria-hidden="true"><line x1="0" y1="2" x2="20" y2="2" stroke="#6C717A" stroke-width="2"/></svg>price</span>
-            <span><svg width="20" height="4" aria-hidden="true"><line x1="0" y1="2" x2="20" y2="2" stroke="#7FE3B5" stroke-width="3"/></svg>f₁+f₂+f₃</span>
+          <figcaption>
+            <span class="chart-waves-only"><span class="simple-only">Price swings vs. the rhythm SINE found</span><span class="detail-only">Detrended log price vs. reconstructed signal</span> <button type="button" class="tip" data-tip="detrended" aria-label="What is this chart?">?</button></span>
+            <span class="chart-spec-only">Rhythm heatmap <span class="muted">(spectrogram)</span> <button type="button" class="tip" data-tip="spectrogram" aria-label="What is a spectrogram?">?</button></span>
+          </figcaption>
+          <div class="chart-tools">
+            <div class="legend chart-waves-only">
+              <span><svg width="20" height="4" aria-hidden="true"><line x1="0" y1="2" x2="20" y2="2" stroke="#6C717A" stroke-width="2"/></svg>price</span>
+              <span><svg width="20" height="4" aria-hidden="true"><line x1="0" y1="2" x2="20" y2="2" stroke="#7FE3B5" stroke-width="3"/></svg>f₁+f₂+f₃</span>
+            </div>
+            <div class="legend chart-spec-only"><span>weaker</span><span class="heat-bar" aria-hidden="true"></span><span>stronger</span></div>
+            <div class="segmented seg-sm" role="group" aria-label="Chart style">
+              <button type="button" data-chart="waves" aria-pressed="true">Waves</button>
+              <button type="button" data-chart="spec" aria-pressed="false">Heatmap</button>
+            </div>
           </div>
         </div>
-        <svg viewBox="0 0 860 280" role="img" aria-label="Detrended log price overlaid with the signal rebuilt from the top three cycles">
+        <svg class="chart-waves-only" viewBox="0 0 860 280" role="img" aria-label="Detrended log price overlaid with the signal rebuilt from the top three cycles">
           <g stroke="#20242A"><line x1="52" y1="30" x2="848" y2="30"/><line x1="52" y1="140" x2="848" y2="140"/><line x1="52" y1="250" x2="848" y2="250"/></g>
           <g fill="#8A8F98" font-family="IBM Plex Mono, monospace" font-size="11" text-anchor="end">
             <text x="46" y="34" id="y-top"></text><text x="46" y="144">0</text><text x="46" y="254" id="y-bot"></text>
@@ -105,11 +133,14 @@
           <text x="812" y="274" text-anchor="end" fill="#8A8F98" font-family="IBM Plex Mono, monospace" font-size="12" id="x-end">last close</text>
           <text x="846" y="274" text-anchor="end" fill="#8A8F98" font-family="IBM Plex Mono, monospace" font-size="12" id="x-live"></text>
         </svg>
+        <canvas id="spec-canvas" class="chart-spec-only spec-canvas" width="860" height="280" role="img" aria-label="Spectrogram"></canvas>
+        <p class="how chart-waves-only">Grey is the actual price with its long-run drift taken out, so you only see the swings. Green is those swings rebuilt from the three strongest rhythms. The closer green follows grey, the more of the movement is rhythmic rather than random. The white dot is the live price.</p>
+        <p class="how chart-spec-only">Like an audio frequency analyzer, for price. Time runs left to right; slow rhythms are at the bottom and fast ones at the top (on a log scale, like audio); brighter means stronger. A steady bright band is a rhythm that has held the whole time. A band that fades, appears or drifts up or down is a rhythm weakening, emerging or changing speed. The dashed line marks the main rhythm (f₁); “f₁ ↓” means it’s slower than this view can show — use a longer candle interval.</p>
       </figure>
 
-      <div class="panel table-scroll">
+      <div class="panel table-scroll detail-only">
         <div class="table cols-7">
-          <div class="row head"><span>cycle</span><span>period</span><span>cycles / day</span><span>frequency</span><span>amplitude</span><span>phase</span><span>share</span></div>
+          <div class="row head"><span>cycle</span><span>period <button type="button" class="tip" data-tip="period" aria-label="What is period?">?</button></span><span>cycles / day</span><span>frequency <button type="button" class="tip" data-tip="frequency" aria-label="What is frequency?">?</button></span><span>amplitude <button type="button" class="tip" data-tip="amplitude" aria-label="What is amplitude?">?</button></span><span>phase <button type="button" class="tip" data-tip="phase" aria-label="What is phase?">?</button></span><span>share <button type="button" class="tip" data-tip="share" aria-label="What is share?">?</button></span></div>
           <div id="rows"></div>
         </div>
       </div>
@@ -154,13 +185,15 @@
 
     <aside class="app-col">
       <div class="panel big-readout">
-        <div class="label">Dominant frequency</div>
-        <div class="value"><span id="dom-uhz">—</span> <small>µHz</small></div>
-        <div class="mono muted" id="dom-period">—</div>
+        <div class="label"><span class="simple-only">Main rhythm</span><span class="detail-only">Dominant frequency</span> <button type="button" class="tip" data-tip="frequency" aria-label="What is the main rhythm?">?</button></div>
+        <div class="value simple-only" id="dom-simple">—</div>
+        <div class="value detail-only"><span id="dom-uhz">—</span> <small>µHz</small></div>
+        <div class="mono muted detail-only" id="dom-period">—</div>
+        <div class="mono muted simple-only" id="dom-swing">—</div>
       </div>
 
       <figure class="panel-2 chart">
-        <figcaption>Where we are in the f₁ cycle</figcaption>
+        <figcaption>Where we are in the main rhythm <button type="button" class="tip" data-tip="position" aria-label="What is cycle position?">?</button></figcaption>
         <svg viewBox="0 0 372 130" role="img" aria-labelledby="cyc-text">
           <line x1="16" y1="65" x2="356" y2="65" stroke="#23272E"/>
           <path id="cyc-wave" fill="none" stroke="#3A4049" stroke-width="2"/>
@@ -171,10 +204,11 @@
           <circle id="cyc-dot" r="6" fill="#7FE3B5" stroke="#0F1114" stroke-width="2" cx="16" cy="105"/>
         </svg>
         <div class="mono muted cyc-text" id="cyc-text">—</div>
+        <p class="how">The dot moves along one full cycle in real time, at the speed SINE measured. Past highs formed near the crest and past lows near the troughs.</p>
       </figure>
 
-      <figure class="panel-2 chart">
-        <figcaption>Amplitude spectrum (Hann)</figcaption>
+      <figure class="panel-2 chart detail-only">
+        <figcaption>Amplitude spectrum (Hann) <button type="button" class="tip" data-tip="spectrum" aria-label="What is the spectrum?">?</button></figcaption>
         <svg viewBox="0 0 372 200" role="img" aria-label="Amplitude spectrum with the top peaks highlighted">
           <line x1="12" y1="176" x2="360" y2="176" stroke="#353A43"/>
           <path id="bars" fill="#3A4049"/>
@@ -182,25 +216,26 @@
           <text x="12" y="195" fill="#8A8F98" font-family="IBM Plex Mono, monospace" font-size="11" id="f-min"></text>
           <text x="360" y="195" text-anchor="end" fill="#8A8F98" font-family="IBM Plex Mono, monospace" font-size="11" id="f-max"></text>
         </svg>
+        <p class="how">Every rhythm the data contains, slow on the left and fast on the right. Tall bars are strong rhythms; the highlighted bars are the three SINE reports.</p>
       </figure>
 
       <div class="panel stats" id="versus" hidden>
         <h2>Against the ecosystem</h2>
         <dl>
-          <div><dt id="v-corr-label">Correlation with basket index</dt><dd id="v-corr">—</dd></div>
-          <div><dt id="v-phase-label">Phase vs. basket at this token’s f₁</dt><dd id="v-phase">—</dd></div>
-          <div><dt id="v-period-label">Basket’s own dominant period</dt><dd id="v-period">—</dd></div>
+          <div><dt><span id="v-corr-label">Correlation with basket index</span> <button type="button" class="tip" data-tip="correlation" aria-label="What is correlation?">?</button></dt><dd id="v-corr">—</dd></div>
+          <div><dt><span id="v-phase-label">Phase vs. basket at this token’s f₁</span> <button type="button" class="tip" data-tip="leadlag" aria-label="What is lead and lag?">?</button></dt><dd id="v-phase">—</dd></div>
+          <div><dt><span id="v-period-label">Basket’s own dominant period</span></dt><dd id="v-period">—</dd></div>
         </dl>
       </div>
 
-      <div class="panel stats">
+      <div class="panel stats detail-only">
         <h2>Measurement</h2>
         <dl>
           <div><dt>Samples (N)</dt><dd id="s-n">—</dd></div>
-          <div><dt>Frequency resolution Δf</dt><dd id="s-df">—</dd></div>
-          <div><dt>Nyquist limit</dt><dd id="s-nyq">—</dd></div>
-          <div><dt>Variance explained (top 3)</dt><dd id="s-exp">—</dd></div>
-          <div><dt>Signal-to-noise</dt><dd id="s-snr">—</dd></div>
+          <div><dt>Frequency resolution Δf <button type="button" class="tip" data-tip="resolution" aria-label="What is frequency resolution?">?</button></dt><dd id="s-df">—</dd></div>
+          <div><dt>Nyquist limit <button type="button" class="tip" data-tip="nyquist" aria-label="What is the Nyquist limit?">?</button></dt><dd id="s-nyq">—</dd></div>
+          <div><dt>Variance explained (top 3) <button type="button" class="tip" data-tip="explained" aria-label="What is variance explained?">?</button></dt><dd id="s-exp">—</dd></div>
+          <div><dt>Signal-to-noise <button type="button" class="tip" data-tip="snr" aria-label="What is signal-to-noise?">?</button></dt><dd id="s-snr">—</dd></div>
           <div><dt>Last updated</dt><dd id="s-upd">—</dd></div>
         </dl>
         <p>Log price → linear detrend → Hann window → DFT. Peaks need ≥ 2 full cycles in the window and ≥ 4 samples per cycle; periods refined by parabolic interpolation. Measurements, not financial advice.</p>
@@ -208,6 +243,7 @@
     </aside>
   </div>
 </main>
+<div class="tip-pop" id="tip-pop" role="status" hidden></div>
 
 </div>
 <script src="/config.js"></script>

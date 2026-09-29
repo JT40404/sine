@@ -112,6 +112,67 @@
     return h.toFixed(1) + " h";
   }
 
+  /**
+   * Short-time Fourier transform (spectrogram) of log price.
+   * Slides a window of Lw samples along the series (step `hop`), and in each window: removes the
+   * linear trend, applies a Hann window and measures amplitude at bins k = 2..kMax
+   * (≥ 2 cycles per window, ≥ 4 samples per cycle). frames[f][k - 2] is the amplitude of bin k.
+   * Lw is at least a quarter of the series and long enough to hold ~2 cycles of the main rhythm when
+   * possible (capped at half the series and 512 samples, to keep it fast enough for live refreshes).
+   */
+  function stft(xs, dt, mainPeriodH) {
+    var N = xs.length, y = xs.map(Math.log);
+    var Lw = Math.round(Math.max(N / 4, mainPeriodH ? 2 * mainPeriodH / dt : 0));
+    Lw = Math.max(Math.min(32, N), Math.min(Lw, Math.floor(N / 2), 512));
+    var kMax = Math.max(2, Math.floor(Lw / 4));
+    var hop = Math.max(1, Math.ceil((N - Lw) / 160));
+    var cosT = new Float64Array(kMax * Lw), sinT = new Float64Array(kMax * Lw), hann = new Float64Array(Lw), k, n;
+    for (k = 1; k <= kMax; k++) for (n = 0; n < Lw; n++) {
+      var g = 2 * Math.PI * k * n / Lw;
+      cosT[(k - 1) * Lw + n] = Math.cos(g); sinT[(k - 1) * Lw + n] = Math.sin(g);
+    }
+    for (n = 0; n < Lw; n++) hann[n] = 0.5 - 0.5 * Math.cos(2 * Math.PI * n / (Lw - 1));
+    var sx = Lw * (Lw - 1) / 2, sxx = (Lw - 1) * Lw * (2 * Lw - 1) / 6, den = Lw * sxx - sx * sx;
+    var starts = [];
+    for (var st = 0; st + Lw <= N; st += hop) starts.push(st);
+    if (starts[starts.length - 1] !== N - Lw) starts.push(N - Lw);
+    var frames = [], ends = [], w = new Float64Array(Lw);
+    starts.forEach(function (st) {
+      var sy = 0, sxy = 0;
+      for (n = 0; n < Lw; n++) { sy += y[st + n]; sxy += n * y[st + n]; }
+      var b = (Lw * sxy - sx * sy) / den, a = (sy - b * sx) / Lw;
+      for (n = 0; n < Lw; n++) w[n] = (y[st + n] - (a + b * n)) * hann[n];
+      var amps = new Float32Array(kMax - 1);
+      for (k = 2; k <= kMax; k++) {
+        var re = 0, im = 0, o = (k - 1) * Lw;
+        for (n = 0; n < Lw; n++) { re += w[n] * cosT[o + n]; im -= w[n] * sinT[o + n]; }
+        amps[k - 2] = 4 * Math.hypot(re, im) / Lw;
+      }
+      frames.push(amps); ends.push(st + Lw - 1);
+    });
+    return { frames: frames, ends: ends, Lw: Lw, kMin: 2, kMax: kMax, hop: hop, dt: dt, N: N };
+  }
+
+  /**
+   * How persistently a rhythm of period P (hours) shows up across the spectrogram:
+   * share = fraction of time slices where its band is at least half as strong as that slice's strongest rhythm;
+   * change = band strength in the latest third of slices ÷ the earliest third.
+   */
+  function persistence(sp, P) {
+    var kb = sp.Lw * sp.dt / P;
+    if (!(kb >= sp.kMin && kb <= sp.kMax)) return null;
+    var kr = Math.round(kb), hits = 0, band = [];
+    sp.frames.forEach(function (f) {
+      var top = 0, e = 0;
+      for (var i = 0; i < f.length; i++) top = Math.max(top, f[i]);
+      for (var k = Math.max(sp.kMin, kr - 1); k <= Math.min(sp.kMax, kr + 1); k++) e = Math.max(e, f[k - sp.kMin]);
+      if (top && e >= 0.5 * top) hits++;
+      band.push(e);
+    });
+    var third = Math.max(1, Math.floor(band.length / 3)), mean = function (a) { return a.reduce(function (s, v) { return s + v; }, 0) / a.length; };
+    return { share: hits / sp.frames.length, change: mean(band.slice(-third)) / Math.max(1e-12, mean(band.slice(0, third))) };
+  }
+
   function detrendLog(xs) {
     var N = xs.length, sx = 0, sy = 0, sxx = 0, sxy = 0, i;
     var y = xs.map(Math.log);
@@ -140,5 +201,5 @@
   function wrapDeg(x) { x = ((x + 180) % 360 + 360) % 360 - 180; return x === -180 ? 180 : x; }
 
   window.SineFourier = { testSignal: testSignal, analyze: analyze, linePath: linePath, barPaths: barPaths, fmtPeriod: fmtPeriod,
-    detrendLog: detrendLog, binPhase: binPhase, corr: corr, wrapDeg: wrapDeg };
+    detrendLog: detrendLog, binPhase: binPhase, stft: stft, persistence: persistence, corr: corr, wrapDeg: wrapDeg };
 })();

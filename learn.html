@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How to read SINE — a plain-English guide</title>
+<meta name="description" content="What SINE’s Fourier analysis measures in Solana markets, how to read every chart and number, where the informational edge comes from — and its limits.">
+<meta property="og:title" content="SINE — Fourier analysis for Solana">
+<meta property="og:description" content="Every market has a frequency. Measure it.">
+<meta name="theme-color" content="#0F1114">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+<div class="wrap">
+
+<header class="site-header">
+  <a class="brand" href="/" aria-label="SINE home">
+    <img src="/assets/sine-icon.svg" width="36" height="36" alt="">
+    <span>SINE</span>
+  </a>
+  <nav class="site-nav" aria-label="Primary">
+    <a href="/#how">How it works</a>
+    <a href="/#modes">Ecosystem &amp; contracts</a>
+    <a href="/#readout">Sample readout</a>
+    <a href="/learn" aria-current="page">Learn</a>
+    <a data-link="docs" href="#">Docs</a>
+    <a class="btn" href="/analyzer">Launch analyzer</a>
+  </nav>
+</header>
+
+<main>
+<section class="learn-hero">
+  <div class="kicker">GUIDE</div>
+  <h1>How to read SINE</h1>
+  <p>No maths background needed. This page explains what SINE measures, what each number and chart means, and how that information can sharpen the way you read a market — plus where it stops being useful.</p>
+</section>
+
+<section id="idea">
+  <div class="readout" style="align-items:center">
+    <div class="prose">
+      <h2>The idea in one minute</h2>
+      <p>Play a chord on a piano and you hear one sound. But that sound is really a few notes played together, each with its own pitch and loudness. A <em>Fourier transform</em> is the maths that takes the combined sound and tells you exactly which notes are in it.</p>
+      <p>SINE does the same thing to a price chart. A token’s price is one wiggly line, but underneath there can be several repeating swings stacked on top of each other: a slow one over days, a faster one over hours, and a lot of random noise. SINE separates them and measures each one.</p>
+      <p>For every rhythm it finds, you get four things: <strong>how often</strong> it repeats, <strong>how big</strong> the swing is, <strong>where</strong> in the swing price is now, and <strong>how much</strong> of the price’s movement it explains.</p>
+    </div>
+    <figure class="panel-2 hero-figure">
+      <svg viewBox="0 0 600 420" role="img" aria-label="One price line split into three separate sine waves">
+        <g stroke="#20242A"><line x1="110" y1="88" x2="576" y2="88"/><line x1="110" y1="234" x2="576" y2="234"/><line x1="110" y1="314" x2="576" y2="314"/><line x1="110" y1="384" x2="576" y2="384"/></g>
+        <text x="24" y="84" fill="#ECE9E2" font-family="IBM Plex Mono, monospace" font-size="13">the chart</text>
+        <text x="24" y="102" fill="#8A8F98" font-family="IBM Plex Mono, monospace" font-size="11">one line</text>
+        <path id="hero-composite" fill="none" stroke="#ECE9E2" stroke-width="2"/>
+        <line x1="24" y1="170" x2="576" y2="170" stroke="#353A43" stroke-dasharray="4 6"/>
+        <rect x="246" y="158" width="108" height="24" rx="12" fill="#13161A" stroke="#353A43"/>
+        <text x="300" y="174" text-anchor="middle" fill="#7FE3B5" font-family="IBM Plex Mono, monospace" font-size="12">separated ↓</text>
+        <text x="24" y="238" fill="#7FE3B5" font-family="IBM Plex Mono, monospace" font-size="12">slow swing</text>
+        <path id="hero-c1" fill="none" stroke="#7FE3B5" stroke-width="2"/>
+        <text x="24" y="318" fill="#F0A857" font-family="IBM Plex Mono, monospace" font-size="12">faster</text>
+        <path id="hero-c2" fill="none" stroke="#F0A857" stroke-width="2"/>
+        <text x="24" y="388" fill="#9DB4FF" font-family="IBM Plex Mono, monospace" font-size="12">fastest</text>
+        <path id="hero-c3" fill="none" stroke="#9DB4FF" stroke-width="2"/>
+      </svg>
+      <figcaption>A real decomposition of a 7-day test series, computed in your browser.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="numbers">
+  <div class="prose">
+    <h2>What the numbers mean</h2>
+    <p>The analyzer opens in <strong>Simple</strong> view, with a written summary at the top. Switch to <strong>Detailed</strong> for the full measurements. Any <span class="mono">?</span> button explains a term on the spot.</p>
+  </div>
+  <dl class="terms">
+    <div class="panel"><dt>RHYTHM STRENGTH</dt><dd>How regular the price has been, from <em>No clear rhythm</em> to <em>Very strong</em>. It’s based on how much of the movement the main rhythms explain, and is marked down if the rhythm has only repeated a couple of times. This is the first thing to check: if it’s weak, the rest is background detail.</dd></div>
+    <div class="panel"><dt>MAIN RHYTHM · PERIOD</dt><dd>How long one full swing takes, high to high: <em>“every 36 hours”</em>. In Detailed view it’s also shown as a frequency in µHz, a unit that makes rhythms comparable across any timeframe.</dd></div>
+    <div class="panel"><dt>AMPLITUDE</dt><dd>How big the swing is. <em>±4%</em> means price has typically risen about 4% above its trend and fallen about 4% below it each cycle.</dd></div>
+    <div class="panel"><dt>SHARE · VARIANCE EXPLAINED</dt><dd>How much of the price’s up-and-down movement a rhythm accounts for. <em>60%</em> means most of the movement follows that rhythm; <em>10%</em> means it’s barely there and news, trades and noise dominate.</dd></div>
+    <div class="panel"><dt>SIGNAL-TO-NOISE</dt><dd>Rhythmic movement compared with everything else. <em>Above 1</em>, the rhythms outweigh randomness. <em>Below 1</em>, randomness wins.</dd></div>
+    <div class="panel"><dt>CYCLE POSITION</dt><dd>Where price sits in its main rhythm right now, moving forward in real time. <em>Rising half</em> or <em>falling half</em>, and how long until the point where past highs or lows formed — if the rhythm holds.</dd></div>
+    <div class="panel"><dt>CORRELATION</dt><dd>From −1 to 1: how much a token moves with the market index once trends are removed. <em>0.7+</em> means it largely follows the market; <em>near 0</em> means it does its own thing.</dd></div>
+    <div class="panel"><dt>LEADS / LAGS</dt><dd>Whether a token’s swings tend to peak <em>before</em> the market’s (leads) or <em>after</em> (lags), and by how long.</dd></div>
+    <div class="panel"><dt>BREADTH</dt><dd>How many of the top tokens rose vs. fell over 24 hours. <em>16 of 20 up</em> is broad strength; <em>5 of 20 up</em> is broad weakness.</dd></div>
+    <div class="panel"><dt>TREND</dt><dd>The steady drift under the swings, per day. Rhythms ride on top of the trend; the trend is often the bigger force.</dd></div>
+  </dl>
+</section>
+
+<section id="charts">
+  <div class="prose">
+    <h2>Reading each chart</h2>
+    <h3>Price swings vs. rhythm</h3>
+    <p>Grey is the real price with its long-run drift removed, so only the swings are left. Green is the same swings rebuilt from just the three strongest rhythms. When green hugs grey, the price is behaving rhythmically. When grey wanders far from green, something else — news, a big buyer or seller, a new trend — is in charge. The pulsing dot is the live price.</p>
+    <h3>Where we are in the main rhythm</h3>
+    <p>One full cycle, trough to crest to trough, with a dot that moves in real time at the measured speed. It shows where past highs and lows formed in this rhythm. It is not a guarantee of where the next ones will be.</p>
+    <h3>Rhythm heatmap (spectrogram)</h3>
+    <p>Switch the main chart from <strong>Waves</strong> to <strong>Heatmap</strong> to see the same analysis the way an audio frequency analyzer shows sound. SINE runs the Fourier transform again and again on a window sliding through time. Time runs left to right. Cycle length runs up the side, slow at the bottom and fast at the top. The colour runs from dark purple for weak through red and orange to pale yellow for strong.</p>
+    <p>This shows <em>when</em> each rhythm was there, not just <em>whether</em> it was. How to read it:</p>
+    <ul>
+      <li><strong>A steady bright band</strong> is a rhythm that has held the whole time. It’s the most trustworthy kind.</li>
+      <li><strong>A band that brightens toward the right</strong> is a rhythm that is emerging.</li>
+      <li><strong>A band that fades toward the right</strong> is a rhythm that is dying out.</li>
+      <li><strong>A band that drifts up or down</strong> is a rhythm speeding up or slowing down.</li>
+      <li><strong>Scattered patches with no band</strong> are noise.</li>
+    </ul>
+    <p>The dashed line marks the main rhythm. The written summary reports how consistently it showed up, and whether it has been getting stronger or fading lately.</p>
+    <h3>Spectrum (Detailed view)</h3>
+    <p>This is the raw output of the Fourier transform: every rhythm in the data, slow on the left and fast on the right. One tall bar standing out means a clear dominant rhythm. Many similar small bars mean noise with no clear rhythm.</p>
+    <h3>Ecosystem pulse</h3>
+    <p>The same analysis applied to the whole market: the top 20 Solana tokens combined into one index. The table shows how each token relates to it — its own rhythm, how closely it follows the market, and whether it tends to move first or later.</p>
+  </div>
+</section>
+
+<section id="edge">
+  <div class="section-head">
+    <h2>Where the informational edge comes from</h2>
+    <p>Charts are easy to over-read. SINE’s value is measuring things most people only eyeball, so you can tell a real pattern from an imagined one.</p>
+  </div>
+  <ol class="edges">
+    <li class="panel">
+      <div class="num">01 · SIGNAL OR NOISE</div>
+      <h3>Know when a pattern is real</h3>
+      <p>Everyone sees “cycles” on charts; most are noise. Rhythm strength and signal-to-noise tell you whether a repeating swing is statistically there — before you trade on it.</p>
+      <div class="look"><b>LOOK FOR</b>Strong or very strong, repeated 6+ times in the window, SNR above 1.</div>
+    </li>
+    <li class="panel">
+      <div class="num">02 · TIMING CONTEXT</div>
+      <h3>Don’t buy the top of a swing</h3>
+      <p>In a token with a strong rhythm, cycle position tells you whether price is early in a rise or near where past highs formed. It’s context for entries and exits, not a trigger.</p>
+      <div class="look"><b>LOOK FOR</b>Late in the rising half with a strong rhythm = elevated risk of buying near a local high.</div>
+    </li>
+    <li class="panel">
+      <div class="num">03 · RIGHT TIMEFRAME</div>
+      <h3>Match your horizon to the market</h3>
+      <p>The main period is the market’s natural rhythm. Holding for a small fraction of it mostly captures noise; holding across several cycles means the trend matters more than the swings.</p>
+      <div class="look"><b>LOOK FOR</b>A 36-hour rhythm suggests trades shorter than ~18 hours are fighting noise.</div>
+    </li>
+    <li class="panel">
+      <div class="num">04 · WHO MOVES FIRST</div>
+      <h3>Leaders and followers</h3>
+      <p>Tokens that track the market closely but peak <em>earlier</em> can hint at where it’s heading. Closely correlated tokens that peak <em>later</em> may be slow to react to a move that has already started.</p>
+      <div class="look"><b>LOOK FOR</b>Correlation 0.5+ with a lead or lag of several hours, holding up across refreshes.</div>
+    </li>
+    <li class="panel">
+      <div class="num">05 · REGIME CHANGE</div>
+      <h3>Notice when the pattern breaks</h3>
+      <p>When a rhythm that was strong suddenly weakens, or the main period jumps, the market’s behaviour has changed — often before it’s obvious on the price chart. The heatmap makes this visible at a glance. That’s a reason to reassess, not to trade the old pattern.</p>
+      <div class="look"><b>LOOK FOR</b>A bright band fading or bending near the right edge of the heatmap, or the summary saying the rhythm is “fading lately”.</div>
+    </li>
+    <li class="panel">
+      <div class="num">06 · MARKET OR TOKEN?</div>
+      <h3>Separate market mood from the token’s story</h3>
+      <p>High correlation means a token mostly rides the market; low correlation means its own news and holders drive it. Breadth tells you whether a market move is broad-based or carried by a few names.</p>
+      <div class="look"><b>LOOK FOR</b>A token rising while breadth is weak and correlation is low is moving on its own story.</div>
+    </li>
+  </ol>
+</section>
+
+<div class="caution" id="limits" style="flex-direction:column;align-items:flex-start;gap:8px">
+  <div class="title" style="flex:none">What SINE can’t do</div>
+  <ul class="limits">
+    <li>Predict prices. Rhythms describe the past, and markets are under no obligation to repeat them.</li>
+    <li>See news, listings, unlocks, hacks or whales. Any of these can override a rhythm instantly.</li>
+    <li>Be reliable on short windows. A rhythm seen only once or twice could easily be coincidence.</li>
+    <li>Handle thin markets well. In low-liquidity tokens a single trade can create a “pattern”.</li>
+    <li>Stay valid forever. Once enough traders act on a pattern, it tends to fade.</li>
+    <li>Replace your judgement. Nothing here is financial advice; always size positions for being wrong.</li>
+  </ul>
+</div>
+
+<section class="cta">
+  <h2>Try it on a real chart.</h2>
+  <p class="muted" style="margin:0;font-size:17px">Open the analyzer in Simple view — the summary at the top explains everything it finds.</p>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
+    <a class="btn" href="/analyzer?mode=ecosystem">Read the Solana market</a>
+    <a class="btn btn-ghost" href="/analyzer">Analyze a token</a>
+  </div>
+</section>
+</main>
+
+<footer class="site-footer">
+  <span>© <span id="year">2026</span> SINE · <span data-sine-symbol>$SINE</span> <span class="ca" data-sine-ca>Address announced at launch</span></span>
+  <nav aria-label="Footer">
+    <a data-link="docs" href="#">Docs</a>
+    <a data-link="x" href="#">X</a>
+    <a data-link="telegram" href="#">Telegram</a>
+    <a data-link="terms" href="#">Terms</a>
+  </nav>
+</footer>
+
+</div>
+<script src="/config.js"></script>
+<script src="/assets/site.js"></script>
+<script src="/assets/fourier.js"></script>
+<script src="/assets/learn.js"></script>
+</body>
+</html>
