@@ -11,13 +11,34 @@ const BASE = !KEY
 
 export const SOURCE = !KEY ? 'GeckoTerminal (public)' : PRO ? 'CoinGecko Pro' : 'CoinGecko Demo';
 
-/** Analysis windows. count × interval = window length. */
-export const WINDOWS = {
-  '1d':  { tf: 'minute', agg: 5,  sec: 300,   count: 288, label: '5m' },
-  '7d':  { tf: 'minute', agg: 15, sec: 900,   count: 672, label: '15m' },
-  '30d': { tf: 'hour',   agg: 1,  sec: 3600,  count: 720, label: '1h' },
-  '90d': { tf: 'hour',   agg: 4,  sec: 14400, count: 540, label: '4h' },
+/**
+ * Candle intervals. `count` candles are analyzed; `cache` is the CDN/memory cache in seconds,
+ * which also sets how "live" the chart can be. Second-level candles are a CoinGecko Pro feature.
+ */
+export const INTERVALS = {
+  '1s':  { tf: 'second', agg: 1,  sec: 1,     count: 600, cache: 1,   pro: true,  label: '1 sec' },
+  '15s': { tf: 'second', agg: 15, sec: 15,    count: 720, cache: 5,   pro: true,  label: '15 sec' },
+  '30s': { tf: 'second', agg: 30, sec: 30,    count: 720, cache: 10,  pro: true,  label: '30 sec' },
+  '1m':  { tf: 'minute', agg: 1,  sec: 60,    count: 720, cache: 15,  label: '1 min' },
+  '5m':  { tf: 'minute', agg: 5,  sec: 300,   count: 576, cache: 30,  label: '5 min' },
+  '15m': { tf: 'minute', agg: 15, sec: 900,   count: 672, cache: 60,  label: '15 min' },
+  '1h':  { tf: 'hour',   agg: 1,  sec: 3600,  count: 720, cache: 120, label: '1 hour' },
+  '4h':  { tf: 'hour',   agg: 4,  sec: 14400, count: 540, cache: 300, label: '4 hours' },
+  '12h': { tf: 'hour',   agg: 12, sec: 43200, count: 730, cache: 600, label: '12 hours' },
+  '1d':  { tf: 'day',    agg: 1,  sec: 86400, count: 365, cache: 900, label: '1 day' },
 };
+export const SECONDS_AVAILABLE = Boolean(KEY) && PRO;
+export const MIN_CANDLES = 64;
+
+/** Accepts ?interval=… (preferred) or the old ?window=1d|7d|30d|90d. */
+export function pickInterval(query) {
+  const legacy = { '1d': '5m', '7d': '15m', '30d': '1h', '90d': '4h' };
+  const id = query.interval ? String(query.interval) : legacy[String(query.window || '')] || '15m';
+  const iv = INTERVALS[id];
+  if (!iv) throw new HttpError(400, `Interval must be one of ${Object.keys(INTERVALS).join(', ')}.`);
+  if (iv.pro && !SECONDS_AVAILABLE) throw new HttpError(400, 'Second-level candles (1s, 15s, 30s) need a CoinGecko Pro API key on the server.');
+  return { id, ...iv };
+}
 
 export class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -84,34 +105,36 @@ export async function tokenWithPools(address) {
 }
 
 /**
- * Completed, evenly spaced candles for `token`'s price in `pool`, oldest first.
- * Gaps (bars with no trades) are forward-filled so the Fourier analysis sees even sampling.
+ * Completed, evenly spaced candles for `token`'s price in `pool`, oldest first, plus the
+ * still-forming candle (`live`) for real-time display. Gaps (no trades) are forward-filled so
+ * the Fourier analysis sees even sampling; the forming candle is never analyzed.
  */
-export async function candles(pool, token, win) {
-  const w = WINDOWS[win];
-  const limit = Math.min(1000, w.count + 3);
+export async function candles(pool, token, iv) {
+  const limit = Math.min(1000, iv.count + 3);
   const j = await gecko(
-    `/networks/solana/pools/${pool}/ohlcv/${w.tf}?aggregate=${w.agg}&limit=${limit}&currency=usd&token=${token}`,
-    30_000,
+    `/networks/solana/pools/${pool}/ohlcv/${iv.tf}?aggregate=${iv.agg}&limit=${limit}&currency=usd&token=${token}`,
+    iv.cache * 1000,
   );
   const now = Date.now() / 1000;
-  const rows = (j?.data?.attributes?.ohlcv_list || [])
+  const all = (j?.data?.attributes?.ohlcv_list || [])
     .map((r) => ({ t: r[0], o: +r[1], h: +r[2], l: +r[3], c: +r[4], v: +r[5] }))
-    .filter((c) => c.c > 0 && c.t + w.sec <= now)
+    .filter((c) => c.c > 0)
     .sort((a, b) => a.t - b.t);
+  const done = all.filter((c) => c.t + iv.sec <= now);
+  const forming = all.filter((c) => c.t + iv.sec > now).pop() || null;
 
   const out = [];
-  for (const c of rows) {
+  for (const c of done) {
     const prev = out[out.length - 1];
     if (prev && c.t === prev.t) continue;
-    if (prev) for (let t = prev.t + w.sec; t < c.t; t += w.sec) out.push({ t, o: prev.c, h: prev.c, l: prev.c, c: prev.c, v: 0 });
+    if (prev) for (let t = prev.t + iv.sec; t < c.t; t += iv.sec) out.push({ t, o: prev.c, h: prev.c, l: prev.c, c: prev.c, v: 0 });
     out.push(c);
   }
-  return out.slice(-w.count);
+  return { bars: out.slice(-iv.count), live: forming ? { t: forming.t, c: forming.c } : null };
 }
 
 export function send(res, body, sMaxAge) {
-  res.setHeader('Cache-Control', `public, s-maxage=${sMaxAge}, stale-while-revalidate=${sMaxAge * 5}`);
+  res.setHeader('Cache-Control', `public, s-maxage=${sMaxAge}, stale-while-revalidate=${Math.max(5, sMaxAge * 5)}`);
   res.status(200).json(body);
 }
 

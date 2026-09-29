@@ -47,7 +47,9 @@
     }
 
     var cand = [];
-    for (k = 2; k < half; k++) if (bins[k].amp > bins[k - 1].amp && bins[k].amp >= bins[k + 1].amp) cand.push(k);
+    // ≥ 2 full cycles in the window, ≥ 4 samples per cycle (ignores noise piled up near Nyquist)
+    var kMax = Math.min(half - 1, Math.floor(N / 4));
+    for (k = 2; k <= kMax; k++) if (bins[k].amp > bins[k - 1].amp && bins[k].amp >= bins[k + 1].amp) cand.push(k);
     cand.sort(function (p, q) { return bins[q].amp - bins[p].amp; });
 
     var T = N * dt;
@@ -62,6 +64,7 @@
         uhz: 1e6 / (period * 3600), cpd: 24 / period,
         amp: bins[k].amp,
         phase: ((Math.atan2(bins[k].im2, bins[k].re2) * 180 / Math.PI) + 360) % 360,
+        theta: Math.atan2(bins[k].im2, bins[k].re2),
         share: variance ? (bins[k - 1].pw + bins[k].pw + bins[k + 1].pw) / variance : 0
       };
     });
@@ -76,7 +79,7 @@
     var recon = d.map(function (_, n) { return comps.reduce(function (s, c) { return s + c[n]; }, 0); });
     var explained = Math.min(0.999, peaks.reduce(function (s, p) { return s + p.share; }, 0));
     return {
-      N: N, dt: dt, T: T, d: d, bins: bins, peaks: peaks, comps: comps, recon: recon,
+      N: N, dt: dt, T: T, d: d, trendA: a, trendB: b, bins: bins, peaks: peaks, comps: comps, recon: recon,
       explained: explained, snr: explained / (1 - explained), df: 1 / T, nyq: 1 / (2 * dt)
     };
   }

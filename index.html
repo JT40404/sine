@@ -52,13 +52,15 @@
       </form>
       <form class="form-block" data-panel="eco" action="/analyzer" method="get" hidden>
         <input type="hidden" name="mode" value="ecosystem">
-        <label class="label" for="win">Analysis window for the Solana basket</label>
+        <label class="label" for="win">Candle interval for the Solana basket</label>
         <div class="input-row">
-          <select class="field" id="win" name="window">
-            <option value="7d">Last 7 days · 15m samples</option>
-            <option value="1d">Last 24 hours · 5m samples</option>
-            <option value="30d">Last 30 days · 1h samples</option>
-            <option value="90d">Last 90 days · 4h samples</option>
+          <select class="field" id="win" name="interval">
+            <option value="1m">1 min candles · last 12 hours</option>
+            <option value="5m">5 min candles · last 2 days</option>
+            <option value="15m" selected>15 min candles · last 7 days</option>
+            <option value="1h">1 hour candles · last 30 days</option>
+            <option value="4h">4 hour candles · last 90 days</option>
+            <option value="1d">1 day candles · last year</option>
           </select>
           <button class="btn" type="submit">Read the pulse</button>
         </div>

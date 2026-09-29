@@ -1,28 +1,34 @@
-import { tokenWithPools, candles, WINDOWS, isMint, send, fail, HttpError, SOURCE } from './_lib/gecko.js';
+import { tokenWithPools, candles, pickInterval, isMint, send, fail, HttpError, SOURCE, MIN_CANDLES } from './_lib/gecko.js';
 
-/** GET /api/market?address=<mint>&window=1d|7d|30d|90d — token info + candles from its most liquid pool. */
+/**
+ * GET /api/market?address=<mint>&interval=1s|15s|30s|1m|5m|15m|1h|4h|12h|1d
+ * Token info + completed candles from its most liquid pool + the forming candle.
+ */
 export default async function handler(req, res) {
   try {
     const address = String(req.query.address || '').trim();
-    const win = String(req.query.window || '7d');
     if (!isMint(address)) throw new HttpError(400, 'Enter a valid Solana token mint address.');
-    if (!WINDOWS[win]) throw new HttpError(400, 'Window must be one of 1d, 7d, 30d, 90d.');
+    const iv = pickInterval(req.query);
 
     const token = await tokenWithPools(address);
     if (!token.topPool) throw new HttpError(404, 'No trading pools found for this token.');
-    const cs = await candles(token.topPool.address, address, win);
-    if (cs.length < 64) throw new HttpError(422, `Only ${cs.length} candles of history for this window — try a shorter window.`);
+    const { bars, live } = await candles(token.topPool.address, address, iv);
+    if (bars.length < MIN_CANDLES) {
+      throw new HttpError(422, `Only ${bars.length} ${iv.label} candles of history — pick a shorter interval.`);
+    }
 
     send(res, {
       token,
-      window: win,
-      interval: WINDOWS[win].label,
-      intervalHours: WINDOWS[win].sec / 3600,
+      interval: iv.id,
+      intervalLabel: iv.label,
+      intervalSec: iv.sec,
+      intervalHours: iv.sec / 3600,
       source: SOURCE,
       updatedAt: new Date().toISOString(),
-      timestamps: cs.map((c) => c.t),
-      closes: cs.map((c) => c.c),
-      volumes: cs.map((c) => c.v),
-    }, win === '1d' ? 60 : 120);
+      timestamps: bars.map((c) => c.t),
+      closes: bars.map((c) => c.c),
+      volumes: bars.map((c) => c.v),
+      live,
+    }, iv.cache);
   } catch (e) { fail(res, e); }
 }

@@ -240,3 +240,19 @@ details.own > summary::after { content: "+"; font-family: var(--mono); color: va
 details.own[open] > summary::after { content: "−"; }
 details.own .data-panel { border: 0; border-top: 1px solid var(--line-soft); border-radius: 0 0 14px 14px; }
 .loading { opacity: 0.55; transition: opacity 0.2s; }
+
+/* ---------- real-time ---------- */
+.live-chip { display: inline-flex; align-items: center; gap: 8px; }
+.live-chip .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); display: none; }
+.live-chip.is-live .pulse { display: inline-block; background: var(--accent); animation: sine-pulse 1.6s ease-in-out infinite; }
+.live-ring { transform-box: fill-box; transform-origin: center; animation: sine-ring 1.6s ease-out infinite; }
+@keyframes sine-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes sine-ring { 0% { transform: scale(0.4); opacity: 0.9; } 100% { transform: scale(1.6); opacity: 0; } }
+.cyc-text { font-size: 13px; line-height: 1.5; }
+.flash { animation: sine-flash 0.8s ease-out; }
+@keyframes sine-flash { 0% { color: var(--accent); } 100% { color: inherit; } }
+@media (prefers-reduced-motion: reduce) {
+  .live-chip.is-live .pulse, .live-ring, .flash { animation: none; }
+  .live-ring { display: none; }
+}
+select option:disabled { color: #5C616A; }

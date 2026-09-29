@@ -1,16 +1,15 @@
 import BASKET from './_lib/basket.js';
-import { gecko, candles, WINDOWS, send, fail, HttpError, SOURCE } from './_lib/gecko.js';
+import { gecko, candles, pickInterval, send, fail, HttpError, SOURCE } from './_lib/gecko.js';
 
 /**
- * GET /api/ecosystem?window=1d|7d|30d|90d
+ * GET /api/ecosystem?interval=1m|5m|15m|1h|4h|12h|1d  (second-level intervals aren't offered: too many upstream calls)
  * Aligned closes for every basket token plus an equal-weight index:
  *   index_t = 100 · exp( mean_i log(close_i,t / close_i,0) )
  */
 export default async function handler(req, res) {
   try {
-    const win = String(req.query.window || '7d');
-    const w = WINDOWS[win];
-    if (!w) throw new HttpError(400, 'Window must be one of 1d, 7d, 30d, 90d.');
+    const w = pickInterval(req.query);
+    if (w.sec < 60) throw new HttpError(400, 'Ecosystem pulse supports 1-minute candles and longer.');
 
     const multi = await gecko(`/networks/solana/tokens/multi/${BASKET.map((b) => b.mint).join(',')}?include=top_pools`, 600_000);
     const meta = new Map();
@@ -24,7 +23,7 @@ export default async function handler(req, res) {
       const m = meta.get(b.mint);
       if (!m?.pool) { dropped.push({ symbol: b.symbol, reason: 'no pool' }); continue; }
       try {
-        const cs = await candles(m.pool, b.mint, win);
+        const cs = (await candles(m.pool, b.mint, w)).bars;
         if (cs.length < w.count * 0.8) { dropped.push({ symbol: b.symbol, reason: 'not enough history' }); continue; }
         series.push({ ...b, name: m.name, pool: m.pool, map: new Map(cs.map((c) => [c.t, c.c])), first: cs[0].t, last: cs[cs.length - 1].t });
       } catch (e) {
@@ -51,9 +50,9 @@ export default async function handler(req, res) {
     });
 
     send(res, {
-      window: win, interval: w.label, intervalHours: w.sec / 3600,
+      interval: w.id, intervalLabel: w.label, intervalSec: w.sec, intervalHours: w.sec / 3600,
       source: SOURCE, updatedAt: new Date().toISOString(),
       timestamps: grid, index, tokens, dropped,
-    }, 300);
+    }, Math.max(60, w.cache));
   } catch (e) { fail(res, e); }
 }

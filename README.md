@@ -8,8 +8,8 @@ analyzer.html         live analyzer: contract lens, ecosystem pulse, or your own
 config.js             ← official token address + social links
 assets/               styles, Fourier core, page scripts, favicon
 api/
-  market.js           GET /api/market?address=<mint>&window=1d|7d|30d|90d
-  ecosystem.js        GET /api/ecosystem?window=1d|7d|30d|90d
+  market.js           GET /api/market?address=<mint>&interval=1s…1d
+  ecosystem.js        GET /api/ecosystem?interval=1m…1d
   token.js            GET /api/token?address=<mint>
   health.js           GET /api/health
   _lib/gecko.js       data-provider client, windows, caching
@@ -24,7 +24,7 @@ vercel.json           clean URLs, function timeout, security headers
 2. In Vercel, choose **Add New → Project** and import the repository. Set Framework preset to **Other** and leave the build settings empty.
 3. Recommended: in Vercel, go to **Settings → Environment Variables** and add:
    - `COINGECKO_API_KEY`: a free Demo key from coingecko.com/en/api
-   - `COINGECKO_PLAN`: `demo`, or `pro` if you have a paid key
+   - `COINGECKO_PLAN`: `demo`, or `pro` if you have a paid key. A Pro key also turns on the 1s, 15s and 30s candles.
 
    Without a key, the site uses GeckoTerminal's keyless tier. That tier is rate-limited per IP address, and Vercel functions share IPs with other projects, so you'll see "rate-limiting" errors under real traffic. After adding the variables, redeploy.
 4. Deploy. Then open `https://<your-domain>/api/health` to check that the functions are running and to see which data source is active.
@@ -33,31 +33,42 @@ vercel.json           clean URLs, function timeout, security headers
 
 In `config.js`, replace `PASTE_SINE_MINT_ADDRESS_HERE` with the SINE mint address. The landing page then shows the address with a copy button. Once the token has a trading pool, it also shows live price, 24h change, liquidity and volume, refreshed every minute.
 
-## How the data flows
+## Candle intervals and real-time updates
 
-| Window | Candle | Samples |
-|---|---|---|
-| 1d | 5m | 288 |
-| 7d | 15m | 672 |
-| 30d | 1h | 720 |
-| 90d | 4h | 540 |
+| Interval | Candles analyzed | Window | Page refreshes every | Needs |
+|---|---|---|---|---|
+| 1 sec | 600 | 10 min | 2 s | CoinGecko **Pro** key |
+| 15 sec | 720 | 3 h | 5 s | CoinGecko **Pro** key |
+| 30 sec | 720 | 6 h | 10 s | CoinGecko **Pro** key |
+| 1 min | 720 | 12 h | 15 s | — |
+| 5 min | 576 | 2 d | 30 s | — |
+| 15 min | 672 | 7 d | 60 s | — |
+| 1 hour | 720 | 30 d | 2 min | — |
+| 4 hours | 540 | 90 d | 5 min | — |
+| 12 hours | 730 | 1 yr | 10 min | — |
+| 1 day | 365 | 1 yr | 15 min | — |
 
-**Contract lens (`/api/market`):**
+CoinGecko's API only offers second-level candles on its paid **Pro** plan. When `COINGECKO_PLAN=pro` is set with a Pro key, the 1s, 15s and 30s options switch on automatically. Without one, those options stay greyed out. `/api/health` reports which intervals are available.
+
+**What updates live on the page:**
+- **Chart.** Each new closed candle slides in from the right, and the price and cycle curves morph to the new analysis.
+- **Live dot.** A pulsing dot shows the still-forming candle's price. That candle is displayed but never analyzed.
+- **Spectrum and dominant frequency.** Bar heights and the frequency number animate to their new values.
+- **Cycle position.** The "where we are in the cycle" marker moves continuously at the measured f₁ frequency. The countdown to the next crest assumes the cycle holds.
+- **Pausing.** Updates pause when the tab is hidden, and the **Live** checkbox stops them.
+- **Reduced motion.** If the visitor's system asks for reduced motion, the page skips the animations.
+
+**Contract lens (`/api/market?address=…&interval=…`):**
 - Finds the token's most liquid pool.
-- Fetches USD candles for that pool.
-- Keeps only completed candles.
-- Fills empty bars with the previous close, so the samples are evenly spaced as Fourier analysis requires.
+- Returns its completed USD candles, with empty bars filled by the previous close, plus the forming candle.
 
-The analyzer then runs the analysis and compares the token with the ecosystem basket. It reports the correlation of the detrended prices, and the phase lead or lag at the token's dominant frequency.
+The page then compares the token with the ecosystem basket, using 1-minute candles and longer.
 
-**Ecosystem pulse (`/api/ecosystem`):**
-- Fetches every token in `api/_lib/basket.js`.
-- Lines their candles up on the same timestamps.
-- Builds an equal-weight index from them.
+**Ecosystem pulse (`/api/ecosystem?interval=…`):**
+- Supports 1-minute candles and longer.
+- Lines up every token in `api/_lib/basket.js` on the same timestamps and builds an equal-weight index.
 
-The analyzer analyzes that index, then shows each token's own dominant period, its correlation with the index, and its phase against the index.
-
-**Caching.** Responses are cached at Vercel's edge: 1–2 minutes for token data and 5 minutes for the basket. Many visitors therefore cost only a few upstream calls. The analyzer auto-refreshes on the same schedule.
+**Caching.** Each response is cached at Vercel's edge for about as long as the page's refresh interval. However many people are watching, each token and interval costs about one upstream call per refresh period.
 
 ## Run locally
 
