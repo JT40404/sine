@@ -367,3 +367,18 @@ body.chart-waves .chart-spec-only, body.chart-spec .chart-waves-only { display: 
   .site-nav .btn { min-height: 44px; padding: 0 14px; font-size: 14px; }
 }
 @media (max-width: 380px) { .site-nav .btn { padding: 0 10px; font-size: 13px; } }
+
+/* GitHub / SINE-BOT button */
+.gh-icon { background: transparent; color: var(--accent); border: 1px solid var(--accent); font: 600 11px var(--mono); letter-spacing: -0.5px; }
+.gh-btn:hover .gh-icon { background: var(--accent); color: var(--bg); }
+.gh-btn .social-handle { font-family: var(--mono); font-size: 13px; letter-spacing: 1px; }
+
+.sm-only { display: none; }
+@media (max-width: 560px) {
+  .lg-only { display: none; }
+  .sm-only { display: inline; }
+  .site-nav { gap: 8px; }
+  .site-nav .social-btn { padding: 0 5px; min-width: 44px; justify-content: center; }
+  .site-nav .social-x { width: 30px; height: 30px; }
+}
+@media (max-width: 370px) { .site-header .brand span { font-size: 20px; letter-spacing: 2px; } }

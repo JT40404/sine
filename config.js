@@ -11,6 +11,7 @@ window.SINE_CONFIG = {
   links: {
     docs: "",      // e.g. "https://docs.example.com" — leave "" to hide
     x: "https://x.com/SineWaveSOL",
+    github: "https://github.com/JT40404/sinebot",   // SINE-BOT source code
     telegram: "",  // e.g. "https://t.me/yourgroup"
     terms: ""
   }
