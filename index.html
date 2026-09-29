@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SINE — Fourier analysis for Solana</title>
+<meta name="description" content="SINE reads Solana market data and runs real Fourier analysis on it, reporting the hidden price cycles as measurable sine waves: frequency, period, amplitude and phase.">
+<meta property="og:title" content="SINE — Fourier analysis for Solana">
+<meta property="og:description" content="Every market has a frequency. Measure it.">
+<meta name="theme-color" content="#0F1114">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+<div class="wrap">
+
+<header class="site-header">
+  <a class="brand" href="/" aria-label="SINE home">
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true"><rect x="0.5" y="0.5" width="35" height="35" rx="8" stroke="#2F343C"/><path d="M5 18 C 9 6, 13 6, 18 18 S 27 30, 31 18" stroke="#7FE3B5" stroke-width="2" stroke-linecap="round"/></svg>
+    <span>SINE</span>
+  </a>
+  <nav class="site-nav" aria-label="Primary">
+    <a href="#how">How it works</a>
+    <a href="#modes">Ecosystem &amp; contracts</a>
+    <a href="#readout">Sample readout</a>
+    <a data-link="docs" href="#">Docs</a>
+    <a class="btn" href="/analyzer">Launch analyzer</a>
+  </nav>
+</header>
+
+<main>
+<section class="hero" id="top">
+  <div class="hero-copy">
+    <div class="kicker">FOURIER ANALYSIS FOR SOLANA</div>
+    <h1>Every market has a frequency. <em>Measure it.</em></h1>
+    <p>SINE reads price and volume across the Solana ecosystem — or a single contract address — and runs real Fourier analysis on it: detrend, window, transform, then pull out the sine waves hiding inside, each with a measurable frequency, period, amplitude and phase.</p>
+
+    <div class="panel analyze-card">
+      <div class="segmented" role="group" aria-label="Analysis mode">
+        <button type="button" data-mode="contract" aria-pressed="true">Contract address</button>
+        <button type="button" data-mode="eco" aria-pressed="false">Whole ecosystem</button>
+      </div>
+      <form class="form-block" data-panel="contract" action="/analyzer" method="get">
+        <label class="label" for="ca">SPL token mint address</label>
+        <div class="input-row">
+          <input class="field" id="ca" name="ca" type="text" placeholder="Paste a contract address…" autocomplete="off" spellcheck="false">
+          <button class="btn" type="submit">Analyze</button>
+        </div>
+      </form>
+      <form class="form-block" data-panel="eco" action="/analyzer" method="get" hidden>
+        <input type="hidden" name="mode" value="ecosystem">
+        <label class="label" for="win">Analysis window for the Solana basket</label>
+        <div class="input-row">
+          <select class="field" id="win" name="window">
+            <option value="7d">Last 7 days · 15m samples</option>
+            <option value="1d">Last 24 hours · 5m samples</option>
+            <option value="30d">Last 30 days · 1h samples</option>
+            <option value="90d">Last 90 days · 4h samples</option>
+          </select>
+          <button class="btn" type="submit">Read the pulse</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <figure class="panel-2 hero-figure">
+    <svg viewBox="0 0 600 420" role="img" aria-label="A price signal decomposed into three sine waves">
+      <g stroke="#20242A"><line x1="110" y1="88" x2="576" y2="88"/><line x1="110" y1="234" x2="576" y2="234"/><line x1="110" y1="314" x2="576" y2="314"/><line x1="110" y1="384" x2="576" y2="384"/></g>
+      <text x="24" y="84" fill="#ECE9E2" font-family="IBM Plex Mono, monospace" font-size="13">Σ signal</text>
+      <text x="24" y="102" fill="#8A8F98" font-family="IBM Plex Mono, monospace" font-size="11">log price</text>
+      <path id="hero-composite" fill="none" stroke="#ECE9E2" stroke-width="2"/>
+      <line x1="24" y1="170" x2="576" y2="170" stroke="#353A43" stroke-dasharray="4 6"/>
+      <rect x="266" y="158" width="68" height="24" rx="12" fill="#13161A" stroke="#353A43"/>
+      <text x="300" y="174" text-anchor="middle" fill="#7FE3B5" font-family="IBM Plex Mono, monospace" font-size="12">FFT ↓</text>
+      <text x="24" y="238" fill="#7FE3B5" font-family="IBM Plex Mono, monospace" font-size="13">f₁</text>
+      <path id="hero-c1" fill="none" stroke="#7FE3B5" stroke-width="2"/>
+      <text x="24" y="318" fill="#F0A857" font-family="IBM Plex Mono, monospace" font-size="13">f₂</text>
+      <path id="hero-c2" fill="none" stroke="#F0A857" stroke-width="2"/>
+      <text x="24" y="388" fill="#9DB4FF" font-family="IBM Plex Mono, monospace" font-size="13">f₃</text>
+      <path id="hero-c3" fill="none" stroke="#9DB4FF" stroke-width="2"/>
+    </svg>
+    <figcaption>Computed live · 7-day test series, detrended, decomposed by DFT</figcaption>
+  </figure>
+</section>
+
+<aside class="panel token-strip" aria-label="Official SINE token">
+  <div class="who">
+    <div class="kicker">OFFICIAL TOKEN</div>
+    <strong data-sine-symbol>$SINE</strong>
+  </div>
+  <div class="addr">
+    <div class="label">Solana contract address</div>
+    <code data-sine-ca>Address announced at launch</code>
+  </div>
+  <div class="live" id="sine-live" hidden>
+    <div><span>Price</span><span id="sine-price">—</span></div>
+    <div><span>24h</span><span id="sine-change">—</span></div>
+    <div><span>Liquidity</span><span id="sine-liq">—</span></div>
+    <div><span>24h volume</span><span id="sine-vol">—</span></div>
+  </div>
+  <button class="btn btn-ghost" type="button" data-copy-ca hidden>Copy address</button>
+  <p class="note">This is the only official SINE address. We will never DM you a different one — always check it here.</p>
+</aside>
+
+<section id="how">
+  <div class="section-head">
+    <h2>From price ticks to a sine wave you can measure.</h2>
+    <p>Any price series can be rebuilt as a sum of sine waves. SINE finds the few that matter and tells you how strong they are.</p>
+  </div>
+  <ol class="steps">
+    <li class="panel"><div class="num">01 · INGEST</div><h3>Pull the data</h3><p>Price, volume and liquidity for the ecosystem basket or one mint address, sampled at a fixed interval.</p></li>
+    <li class="panel"><div class="num">02 · PREPARE</div><h3>Clean the signal</h3><p>Take the log of price, fit and remove the linear trend, then apply a Hann window so the edges don’t leak false frequencies.</p></li>
+    <li class="panel"><div class="num">03 · TRANSFORM</div><h3>Run the transform</h3><p>A discrete Fourier transform projects the series onto sine waves at every frequency it can resolve — from two cycles per window up to the Nyquist limit.</p></li>
+    <li class="panel"><div class="num">04 · MEASURE</div><h3>Report the waves</h3><p>Spectral peaks are located with sub-bin interpolation and reported as frequency, period, amplitude and phase, plus the share of variance each explains.</p></li>
+  </ol>
+</section>
+
+<section id="modes">
+  <h2>Two lenses, one method.</h2>
+  <div class="lenses">
+    <article class="panel eco">
+      <div class="kicker">ECOSYSTEM PULSE</div>
+      <h3>The broad Solana market</h3>
+      <p>Analyzes a basket of liquid Solana tokens to find the rhythms the whole ecosystem shares.</p>
+      <ul>
+        <li><span class="tick">~</span><span>Shared dominant cycles across the basket</span></li>
+        <li><span class="tick">~</span><span>Phase alignment — which tokens peak together</span></li>
+        <li><span class="tick">~</span><span>Spectrum shifts as market regimes change</span></li>
+      </ul>
+    </article>
+    <article class="panel">
+      <div class="kicker">CONTRACT LENS</div>
+      <h3>One token, taken apart</h3>
+      <p>Paste any SPL token mint address and get that token’s own spectrum, measured against the ecosystem’s.</p>
+      <ul>
+        <li><span class="tick">~</span><span>Its dominant frequencies and periods</span></li>
+        <li><span class="tick">~</span><span>How closely it tracks ecosystem cycles</span></li>
+        <li><span class="tick">~</span><span>Signal-to-noise: how much movement is cyclic vs. random</span></li>
+      </ul>
+    </article>
+  </div>
+</section>
+
+<section id="readout">
+  <div class="readout-head">
+    <h2>Proof on a known signal.</h2>
+    <span class="chip">test series · cycles planted at 3.5 d, 33.6 h, 15.3 h + noise</span>
+  </div>
+  <div class="readout">
+    <figure class="panel-2">
+      <figcaption>Amplitude spectrum</figcaption>
+      <svg viewBox="0 0 640 300" role="img" aria-label="Amplitude spectrum with three peaks labelled f1, f2 and f3">
+        <line x1="48" y1="250" x2="620" y2="250" stroke="#353A43"/>
+        <line x1="48" y1="30" x2="48" y2="250" stroke="#353A43"/>
+        <path id="spec-bars" fill="#3A4049"/>
+        <path id="spec-peaks" fill="#7FE3B5"/>
+        <g id="spec-labels" fill="#ECE9E2" font-family="IBM Plex Mono, monospace" font-size="13" text-anchor="middle"></g>
+        <text x="620" y="278" text-anchor="end" fill="#8A8F98" font-family="IBM Plex Mono, monospace" font-size="12">frequency →</text>
+        <text x="48" y="20" fill="#8A8F98" font-family="IBM Plex Mono, monospace" font-size="12">amplitude</text>
+      </svg>
+    </figure>
+    <div class="panel table cols-5">
+      <div class="row head"><span>cycle</span><span>period</span><span>freq</span><span>amplitude</span><span>share</span></div>
+      <div id="readout-rows"></div>
+      <p class="foot">This table is computed in your browser, not typed in. Three cycles were planted in a noisy test series; the pipeline finds them without being told. “Share” is the fraction of detrended variance each wave explains.</p>
+    </div>
+  </div>
+</section>
+
+<div class="caution">
+  <div class="title">A measuring tool, not a crystal ball.</div>
+  <p>Cycles describe what the data has done. Markets are under no obligation to repeat them, and a strong past cycle can vanish overnight. Nothing on this site is financial advice — always do your own research.</p>
+</div>
+
+<section class="cta">
+  <h2>Point it at a contract.</h2>
+  <form class="form-block" action="/analyzer" method="get">
+    <label class="label" for="ca2">SPL token mint address</label>
+    <div class="input-row">
+      <input class="field" id="ca2" name="ca" type="text" placeholder="Paste a contract address…" autocomplete="off" spellcheck="false">
+      <button class="btn" type="submit">Analyze</button>
+    </div>
+  </form>
+</section>
+</main>
+
+<footer class="site-footer">
+  <span>© <span id="year">2026</span> SINE · <span data-sine-symbol>$SINE</span> <span class="ca" data-sine-ca>Address announced at launch</span></span>
+  <nav aria-label="Footer">
+    <a data-link="docs" href="#">Docs</a>
+    <a data-link="x" href="#">X</a>
+    <a data-link="telegram" href="#">Telegram</a>
+    <a data-link="terms" href="#">Terms</a>
+  </nav>
+</footer>
+
+</div>
+<script src="/config.js"></script>
+<script src="/assets/site.js"></script>
+<script src="/assets/fourier.js"></script>
+<script src="/assets/landing.js"></script>
+</body>
+</html>

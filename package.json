@@ -1,0 +1,7 @@
+{
+  "name": "sine-site",
+  "private": true,
+  "type": "module",
+  "description": "SINE website + market-data API (Vercel serverless functions). No dependencies.",
+  "engines": { "node": ">=20" }
+}

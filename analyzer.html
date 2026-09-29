@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SINE analyzer — Fourier readout</title>
+<meta name="description" content="Paste a Solana token's price history and get its dominant cycles: frequency, period, amplitude, phase and share of variance.">
+<meta name="theme-color" content="#0F1114">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+<div class="wrap">
+
+<header class="app-header">
+  <a class="brand" href="/" aria-label="SINE home">
+    <svg width="32" height="32" viewBox="0 0 36 36" fill="none" aria-hidden="true"><rect x="0.5" y="0.5" width="35" height="35" rx="8" stroke="#2F343C"/><path d="M5 18 C 9 6, 13 6, 18 18 S 27 30, 31 18" stroke="#7FE3B5" stroke-width="2" stroke-linecap="round"/></svg>
+    <span>SINE</span>
+  </a>
+  <form id="ca-form">
+    <label for="ca">Contract address</label>
+    <input class="field" id="ca" name="ca" type="text" placeholder="Paste a Solana token mint address…" autocomplete="off" spellcheck="false">
+    <button class="btn" type="submit">Analyze</button>
+  </form>
+  <a class="nav-link" href="/analyzer?mode=ecosystem" id="eco-link">Ecosystem pulse</a>
+</header>
+
+<main class="app-main">
+  <div class="notice" id="status" role="status" hidden></div>
+
+  <div class="report-head">
+    <div>
+      <div class="meta" id="meta">CONTRACT LENS</div>
+      <h1><span id="title">Paste a contract address</span> <span class="ticker" id="ticker"></span></h1>
+    </div>
+    <div class="report-controls">
+      <label class="label" for="window">Window</label>
+      <select class="field" id="window">
+        <option value="1d">24 hours · 5m</option>
+        <option value="7d" selected>7 days · 15m</option>
+        <option value="30d">30 days · 1h</option>
+        <option value="90d">90 days · 4h</option>
+      </select>
+      <label class="check"><input type="checkbox" id="auto" checked> Auto-refresh</label>
+      <span class="chip" id="source">test signal</span>
+    </div>
+  </div>
+
+  <dl class="panel market" id="market" hidden>
+    <div><dt>Price</dt><dd id="m-price">—</dd></div>
+    <div><dt>24h change</dt><dd id="m-change">—</dd></div>
+    <div><dt>Liquidity</dt><dd id="m-liq">—</dd></div>
+    <div><dt>24h volume</dt><dd id="m-vol">—</dd></div>
+    <div><dt>Top pool</dt><dd><a id="m-pool" href="#" target="_blank" rel="noopener">—</a></dd></div>
+  </dl>
+
+  <div class="app-grid">
+    <div class="app-col">
+      <figure class="panel-2 chart" id="chart-fig">
+        <div class="top">
+          <figcaption>Detrended log price vs. reconstructed signal</figcaption>
+          <div class="legend">
+            <span><svg width="20" height="4" aria-hidden="true"><line x1="0" y1="2" x2="20" y2="2" stroke="#6C717A" stroke-width="2"/></svg>price</span>
+            <span><svg width="20" height="4" aria-hidden="true"><line x1="0" y1="2" x2="20" y2="2" stroke="#7FE3B5" stroke-width="3"/></svg>f₁+f₂+f₃</span>
+          </div>
+        </div>
+        <svg viewBox="0 0 860 280" role="img" aria-label="Detrended log price overlaid with the signal rebuilt from the top three cycles">
+          <g stroke="#20242A"><line x1="52" y1="30" x2="840" y2="30"/><line x1="52" y1="140" x2="840" y2="140"/><line x1="52" y1="250" x2="840" y2="250"/></g>
+          <g fill="#8A8F98" font-family="IBM Plex Mono, monospace" font-size="11" text-anchor="end">
+            <text x="46" y="34" id="y-top"></text><text x="46" y="144">0</text><text x="46" y="254" id="y-bot"></text>
+          </g>
+          <path id="price" fill="none" stroke="#6C717A" stroke-width="1.2"/>
+          <path id="recon" fill="none" stroke="#7FE3B5" stroke-width="2.5"/>
+          <text x="52" y="274" fill="#8A8F98" font-family="IBM Plex Mono, monospace" font-size="12" id="x-start"></text>
+          <text x="840" y="274" text-anchor="end" fill="#8A8F98" font-family="IBM Plex Mono, monospace" font-size="12" id="x-end">latest</text>
+        </svg>
+      </figure>
+
+      <div class="panel table-scroll">
+        <div class="table cols-7">
+          <div class="row head"><span>cycle</span><span>period</span><span>cycles / day</span><span>frequency</span><span>amplitude</span><span>phase</span><span>share</span></div>
+          <div id="rows"></div>
+        </div>
+      </div>
+
+      <div class="panel" id="basket" hidden>
+        <div class="panel-title">Basket tokens against the index</div>
+        <div class="table-scroll">
+          <div class="table cols-5b">
+            <div class="row head"><span>token</span><span>own f₁ period</span><span>share of f₁</span><span>correlation</span><span>phase vs. index f₁</span></div>
+            <div id="basket-rows"></div>
+          </div>
+        </div>
+        <p class="panel-note" id="basket-note">Correlation is between detrended log prices. Phase compares each token to the index at the index’s dominant frequency: “leads” means the token tends to peak earlier.</p>
+      </div>
+
+      <details class="own" id="own">
+        <summary>Analyze your own data</summary>
+        <div class="panel data-panel">
+          <div class="top">
+            <label for="series">Price series</label>
+            <span>Closing prices, oldest first — one per line, or CSV with price in the last column</span>
+          </div>
+          <textarea class="field" id="series" rows="6" spellcheck="false" placeholder="0.01234&#10;0.01241&#10;0.01238"></textarea>
+          <div class="controls">
+            <label class="label" for="dt">Sample interval</label>
+            <select class="field" id="dt">
+              <option value="0.016666666666666666">1 min</option>
+              <option value="0.08333333333333333">5 min</option>
+              <option value="0.25" selected>15 min</option>
+              <option value="1">1 hour</option>
+              <option value="4">4 hours</option>
+              <option value="24">1 day</option>
+            </select>
+            <span class="spacer"></span>
+            <button class="btn btn-ghost" type="button" id="load-test">Load test signal</button>
+            <button class="btn" type="button" id="run">Run Fourier analysis</button>
+          </div>
+          <div class="error" id="error" role="alert"></div>
+        </div>
+      </details>
+    </div>
+
+    <aside class="app-col">
+      <div class="panel big-readout">
+        <div class="label">Dominant frequency</div>
+        <div class="value"><span id="dom-uhz">—</span> <small>µHz</small></div>
+        <div class="mono muted" id="dom-period">—</div>
+      </div>
+
+      <figure class="panel-2 chart">
+        <figcaption>Amplitude spectrum (Hann)</figcaption>
+        <svg viewBox="0 0 372 200" role="img" aria-label="Amplitude spectrum with the top peaks highlighted">
+          <line x1="12" y1="176" x2="360" y2="176" stroke="#353A43"/>
+          <path id="bars" fill="#3A4049"/>
+          <path id="peak-bars" fill="#7FE3B5"/>
+          <text x="12" y="195" fill="#8A8F98" font-family="IBM Plex Mono, monospace" font-size="11" id="f-min"></text>
+          <text x="360" y="195" text-anchor="end" fill="#8A8F98" font-family="IBM Plex Mono, monospace" font-size="11" id="f-max"></text>
+        </svg>
+      </figure>
+
+      <div class="panel stats" id="versus" hidden>
+        <h2>Against the ecosystem</h2>
+        <dl>
+          <div><dt>Correlation with basket index</dt><dd id="v-corr">—</dd></div>
+          <div><dt>Phase vs. basket at this token’s f₁</dt><dd id="v-phase">—</dd></div>
+          <div><dt>Basket’s own dominant period</dt><dd id="v-period">—</dd></div>
+        </dl>
+      </div>
+
+      <div class="panel stats">
+        <h2>Measurement</h2>
+        <dl>
+          <div><dt>Samples (N)</dt><dd id="s-n">—</dd></div>
+          <div><dt>Frequency resolution Δf</dt><dd id="s-df">—</dd></div>
+          <div><dt>Nyquist limit</dt><dd id="s-nyq">—</dd></div>
+          <div><dt>Variance explained (top 3)</dt><dd id="s-exp">—</dd></div>
+          <div><dt>Signal-to-noise</dt><dd id="s-snr">—</dd></div>
+          <div><dt>Last updated</dt><dd id="s-upd">—</dd></div>
+        </dl>
+        <p>Log price → linear detrend → Hann window → DFT. Peaks need ≥ 2 full cycles in the window; periods refined by parabolic interpolation. Measurements, not financial advice.</p>
+      </div>
+    </aside>
+  </div>
+</main>
+
+</div>
+<script src="/config.js"></script>
+<script src="/assets/site.js"></script>
+<script src="/assets/fourier.js"></script>
+<script src="/assets/analyzer.js"></script>
+</body>
+</html>
