@@ -264,3 +264,6 @@ select option:disabled { color: #5C616A; }
 #basket-rows { max-height: 560px; overflow-y: auto; }
 .panel-sub { padding: 6px 24px 0; font-size: 13px; color: var(--muted); }
 select:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.token-logo { width: 64px; height: 64px; border-radius: 16px; border: 1px solid var(--line); flex-shrink: 0; }
+.brand img { display: block; border-radius: 8px; }
