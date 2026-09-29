@@ -9,12 +9,13 @@ config.js             ← official token address + social links
 assets/               styles, Fourier core, page scripts, favicon
 api/
   market.js           GET /api/market?address=<mint>&interval=1s…1d
-  top50.js            GET /api/top50?weight=cap|equal   (Top 50 Solana market index)
+  top.js              GET /api/top?weight=cap|equal     (Top 20 Solana market index)
+  open.js             GET /api/open?id=<coingecko id>   (token → contract lens redirect)
   ecosystem.js        GET /api/ecosystem?interval=1m…1d (Core 6 on-chain basket)
   token.js            GET /api/token?address=<mint>
   health.js           GET /api/health
   _lib/gecko.js       data-provider client, windows, caching
-  _lib/basket.js      ← Top 50 rules (size, exclusions, weight cap) + Core 6 tokens
+  _lib/basket.js      ← Top 20 rules (size, filters, weight cap) + Core 6 tokens
 vercel.json           clean URLs, function timeout, security headers
 .env.example          environment variables (set these in Vercel, not in a file)
 ```
@@ -34,33 +35,23 @@ vercel.json           clean URLs, function timeout, security headers
 
 In `config.js`, replace `PASTE_SINE_MINT_ADDRESS_HERE` with the SINE mint address. The landing page then shows the address with a copy button. Once the token has a trading pool, it also shows live price, 24h change, liquidity and volume, refreshed every minute.
 
-## Top 50 Solana market index
+## Top 20 Solana market index
 
-**Ecosystem pulse** opens on the **Top 50** index by default. It is built as follows:
+**Ecosystem pulse** opens on the **Top 20** index by default. It needs exactly **one** CoinGecko call per refresh, cached for 2 minutes, so it works on the free Demo plan.
 
-1. **Membership.** On every refresh, the API pulls CoinGecko's *Solana ecosystem* ranking by market cap and walks down it until it has 50 eligible tokens. It skips:
-   - stablecoins, liquid-staking tokens, and wrapped or bridged assets (by CoinGecko category, plus a stablecoin price check)
-   - anything without a Solana contract address
+1. **Membership.** The API takes CoinGecko's *Solana ecosystem* ranking by market cap and walks down it until it has 20 eligible tokens. It filters out tokens that aren't real market assets, using the data already in that one response:
+   - **stablecoins**: USD/EUR/GBP in the symbol, or pinned near $1 all week
+   - **liquid-staking tokens and other SOL derivatives**: hourly returns move with SOL almost exactly (correlation above 0.95)
+   - **wrapped BTC/ETH and tokenized gold**: by symbol
 
-   Tokens join and leave automatically as the rankings change. The rules are in `api/_lib/basket.js` (`TOP`).
-2. **Prices.** All 50 tokens come from **one** API call: CoinGecko's hourly 7-day price history for each token. That's 168 hourly points per token, so this index runs on **1-hour candles over 7 days**, and the interval picker is locked while it's selected.
-3. **Index.** Two weighting options:
-   - **Market-cap weighted** (default). Weights follow market cap, but each token is capped at 20% so SOL doesn't become the whole index.
+   The page lists what was left out. You can force coins in or out, or change the size, in `api/_lib/basket.js` (`TOP`).
+2. **Prices.** The index uses CoinGecko's 7-day hourly price history for each token, so it runs on **1-hour candles over 7 days**.
+3. **Weighting.** Two options:
+   - **Market-cap weighted** (default). Each token is capped at 20% of the index.
    - **Equal weighted.** Every token counts the same.
-4. **Live.** The index level is recalculated from current prices every 2 minutes, and a live dot shows it on the chart.
+4. **Live.** The index level is recalculated from current prices every 2 minutes.
 
-The page shows:
-- the index level, 24h and 7-day change
-- breadth (how many of the 50 were up or down in the last 24h)
-- the trend slope
-- the Fourier readout
-- a table of all 50 tokens with weight, 24h change, each token's own dominant cycle, correlation with the index, and whether it leads or lags the index
-
-Click any token to open it in the contract lens.
-
-In the contract lens at **1-hour** candles, a token is compared against the Top 50 index. At other intervals it is compared against the **Core 6** on-chain basket, which also remains available as a basket option at any interval from 1 minute up.
-
-**API usage.** A Top 50 refresh costs 1 call. Category and contract-address lookups add about 6 calls, cached for 24 hours. The free Demo plan also has a **monthly** call limit, so check your usage in the CoinGecko dashboard once the site gets traffic.
+**Clicking a token** calls `/api/open`, which looks up the token's Solana contract address (one call, cached for a day) and opens it in the contract lens. At 1-hour candles, the contract lens compares a token against this Top 20 index. At other intervals it uses the **Core 6** on-chain basket, which is also still available as a basket option.
 
 ## Candle intervals and real-time updates
 
@@ -98,6 +89,20 @@ The page then compares the token with the ecosystem basket, using 1-minute candl
 - Lines up every token in `api/_lib/basket.js` on the same timestamps and builds an equal-weight index.
 
 **Caching.** Each response is cached at Vercel's edge for about as long as the page's refresh interval. However many people are watching, each token and interval costs about one upstream call per refresh period.
+
+## Troubleshooting
+
+Open **`/api/health?check=1`** on your deployed site. It calls both data providers and reports exactly what failed.
+
+| Error | Cause | Fix |
+|---|---|---|
+| **HTTP 403 with no key** | CoinGecko or GeckoTerminal is blocking Vercel's shared server IPs on the keyless tier | Add a free Demo key as `COINGECKO_API_KEY` |
+| **HTTP 403 with a key** | The key is inactive or mistyped | Regenerate it in the CoinGecko developer dashboard and paste it again |
+| **HTTP 401 / error 10002** | The key is missing or wrong | Check `COINGECKO_API_KEY` |
+| **Error 10010 / 10011** | The key type doesn't match `COINGECKO_PLAN` | Handled automatically: the API switches to the matching URL. Still set `COINGECKO_PLAN` correctly (`demo` or `pro`). The Vercel function logs say which one. |
+| **Error 10005** | That data isn't included in your CoinGecko plan | Upgrade the plan or use a different interval |
+
+After changing any environment variable in Vercel, **redeploy**. Existing deployments keep the old values.
 
 ## Run locally
 

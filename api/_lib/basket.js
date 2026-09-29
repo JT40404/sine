@@ -1,16 +1,19 @@
 /**
- * Top-N market basket (Ecosystem Pulse → "Top 50").
- * Membership is recomputed live from CoinGecko's Solana-ecosystem ranking by market cap.
- * Coins in excludeCategories are skipped so the index tracks tradable Solana assets rather
- * than dollar pegs or SOL derivatives. Unknown category ids are ignored.
+ * Top-N market basket (Ecosystem Pulse → "Top 20").
+ * Membership is recomputed live from CoinGecko's Solana-ecosystem ranking by market cap,
+ * using ONE API call. Non-market tokens are filtered from that same response:
+ *  - stablecoins: USD/EUR/GBP in the symbol, or pinned near $1 all week
+ *  - SOL derivatives (liquid-staking tokens etc.): hourly returns track SOL almost exactly
+ *  - wrapped/bridged BTC & ETH and tokenized gold: by symbol
  */
 export const TOP = {
-  size: 50,
-  candidates: 150,               // how many ranked coins to scan to find `size` eligible ones
+  size: 20,
+  candidates: 60,                // ranked coins scanned to find `size` eligible ones
   category: 'solana-ecosystem',
-  excludeCategories: ['stablecoins', 'liquid-staking-tokens', 'wrapped-tokens', 'bridged-tokens', 'tokenized-gold'],
-  alwaysExclude: [],             // CoinGecko ids to skip by hand, e.g. ['some-coin-id']
   capLimit: 0.2,                 // max weight of any one token in the market-cap index
+  solTrackingCorr: 0.95,         // hourly-return correlation with SOL above which a coin counts as a SOL derivative
+  alwaysExclude: [],             // CoinGecko ids to skip by hand, e.g. ['some-coin-id']
+  alwaysInclude: [],             // CoinGecko ids to keep even if a filter would drop them
 };
 
 /**

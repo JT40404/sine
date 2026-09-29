@@ -3,13 +3,20 @@
  * - No key: GeckoTerminal public API (low, per-IP rate limits).
  * - COINGECKO_API_KEY (+ COINGECKO_PLAN=demo|pro): CoinGecko on-chain endpoints, per-key limits.
  */
-const KEY = process.env.COINGECKO_API_KEY || '';
-const PRO = (process.env.COINGECKO_PLAN || '').toLowerCase() === 'pro';
-const BASE = !KEY
-  ? 'https://api.geckoterminal.com/api/v2'
-  : PRO ? 'https://pro-api.coingecko.com/api/v3/onchain' : 'https://api.coingecko.com/api/v3/onchain';
+const KEY = (process.env.COINGECKO_API_KEY || '').trim();
+// Plan can be corrected at runtime if CoinGecko reports the key is the other type (errors 10010/10011).
+let PRO = (process.env.COINGECKO_PLAN || '').trim().toLowerCase() === 'pro';
 
-export const SOURCE = !KEY ? 'GeckoTerminal (public)' : PRO ? 'CoinGecko Pro' : 'CoinGecko Demo';
+const onchainBase = () => (!KEY ? 'https://api.geckoterminal.com/api/v2'
+  : PRO ? 'https://pro-api.coingecko.com/api/v3/onchain' : 'https://api.coingecko.com/api/v3/onchain');
+const cgBase = () => (KEY && PRO ? 'https://pro-api.coingecko.com/api/v3' : 'https://api.coingecko.com/api/v3');
+
+export const sourceName = () => (!KEY ? 'GeckoTerminal (public)' : PRO ? 'CoinGecko Pro' : 'CoinGecko Demo');
+export const cgSourceName = () => (!KEY ? 'CoinGecko (public)' : PRO ? 'CoinGecko Pro' : 'CoinGecko Demo');
+export const keyInfo = () => ({ keySet: Boolean(KEY), plan: KEY ? (PRO ? 'pro' : 'demo') : 'none', configuredPlan: (process.env.COINGECKO_PLAN || '').trim() || null });
+// Kept for existing imports; evaluated at load time.
+export const SOURCE = sourceName();
+export const CG_SOURCE = cgSourceName();
 
 /**
  * Candle intervals. `count` candles are analyzed; `cache` is the CDN/memory cache in seconds,
@@ -27,7 +34,8 @@ export const INTERVALS = {
   '12h': { tf: 'hour',   agg: 12, sec: 43200, count: 730, cache: 600, label: '12 hours' },
   '1d':  { tf: 'day',    agg: 1,  sec: 86400, count: 365, cache: 900, label: '1 day' },
 };
-export const SECONDS_AVAILABLE = Boolean(KEY) && PRO;
+export const secondsAvailable = () => Boolean(KEY) && PRO;
+export const SECONDS_AVAILABLE = secondsAvailable();
 export const MIN_CANDLES = 64;
 
 /** Accepts ?interval=… (preferred) or the old ?window=1d|7d|30d|90d. */
@@ -36,7 +44,7 @@ export function pickInterval(query) {
   const id = query.interval ? String(query.interval) : legacy[String(query.window || '')] || '15m';
   const iv = INTERVALS[id];
   if (!iv) throw new HttpError(400, `Interval must be one of ${Object.keys(INTERVALS).join(', ')}.`);
-  if (iv.pro && !SECONDS_AVAILABLE) throw new HttpError(400, 'Second-level candles (1s, 15s, 30s) need a CoinGecko Pro API key on the server.');
+  if (iv.pro && !secondsAvailable()) throw new HttpError(400, 'Second-level candles (1s, 15s, 30s) need a CoinGecko Pro API key on the server.');
   return { id, ...iv };
 }
 
@@ -48,37 +56,65 @@ export const isMint = (s) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s || '');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const num = (v) => (v === null || v === undefined || v === '' || !isFinite(Number(v)) ? null : Number(v));
 
-const CG_BASE = KEY && PRO ? 'https://pro-api.coingecko.com/api/v3' : 'https://api.coingecko.com/api/v3';
-export const CG_SOURCE = !KEY ? 'CoinGecko (public)' : PRO ? 'CoinGecko Pro' : 'CoinGecko Demo';
-
 // Per-instance memory cache (warm functions reuse it); the CDN cache does the heavy lifting.
 const memo = new Map();
 
-async function getJSON(url, ttlMs) {
+function explain(status, body, host) {
+  let code = '', msg = '';
+  try {
+    const j = JSON.parse(body);
+    code = String(j?.status?.error_code ?? j?.error_code ?? '');
+    msg = j?.status?.error_message || j?.error || j?.errors?.[0]?.title || '';
+  } catch { /* not JSON (e.g. a firewall page) */ }
+  if (code === '10005') return `Your CoinGecko plan doesn't include this data (${host}, error 10005). Upgrade the plan or use a different interval.`;
+  if (code === '10002' || status === 401) return `CoinGecko rejected the API key (${host}, HTTP ${status}${code ? `, error ${code}` : ''}). Check COINGECKO_API_KEY in Vercel.`;
+  if (status === 403 && !KEY) {
+    return `The data provider blocked this server (${host}, HTTP 403). Keyless access is often blocked from Vercel's shared IPs — add a free CoinGecko Demo key as COINGECKO_API_KEY in Vercel, then redeploy.`;
+  }
+  if (status === 403) {
+    return `CoinGecko refused the request (${host}, HTTP 403${code ? `, error ${code}` : ''}${msg ? `: ${msg}` : ''}). Check the key is active and COINGECKO_PLAN matches it (demo or pro).`;
+  }
+  return `Market data provider returned HTTP ${status} (${host})${msg ? `: ${msg}` : ''}.`;
+}
+
+async function getJSON(kind, path, ttlMs) {
+  const url = () => (kind === 'onchain' ? onchainBase() : cgBase()) + path;
   if (ttlMs) {
-    const hit = memo.get(url);
+    const hit = memo.get(url());
     if (hit && hit.exp > Date.now()) return hit.value;
   }
-  const headers = { accept: 'application/json' };
-  if (KEY) headers[PRO ? 'x-cg-pro-api-key' : 'x-cg-demo-api-key'] = KEY;
-
-  let wait = 1500;
-  for (let attempt = 0; attempt < 4; attempt++) {
-    const res = await fetch(url, { headers });
-    if (res.status === 429) { if (attempt < 3) { await sleep(wait); wait *= 2; } continue; }
+  let wait = 1500, flipped = false;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const target = url();
+    const headers = { accept: 'application/json', 'user-agent': 'SINE-site/1.0 (+https://vercel.com)' };
+    if (KEY) headers[PRO ? 'x-cg-pro-api-key' : 'x-cg-demo-api-key'] = KEY;
+    const res = await fetch(target, { headers });
+    if (res.status === 429) { if (attempt < 4) { await sleep(wait); wait *= 2; } continue; }
+    if (res.ok) {
+      const value = await res.json();
+      if (ttlMs) memo.set(target, { value, exp: Date.now() + ttlMs });
+      return value;
+    }
+    const body = await res.text().catch(() => '');
+    const host = new URL(target).host;
+    // Key is the other type than COINGECKO_PLAN says: switch once and retry.
+    if (KEY && !flipped && /1001[01]/.test(body)) {
+      PRO = /10010/.test(body);
+      flipped = true;
+      console.warn(`CoinGecko says the key is a ${PRO ? 'Pro' : 'Demo'} key; switching. Set COINGECKO_PLAN=${PRO ? 'pro' : 'demo'} in Vercel.`);
+      continue;
+    }
+    console.error(`Upstream ${res.status} from ${host}${path.split('?')[0]}: ${body.slice(0, 300)}`);
     if (res.status === 404) throw new HttpError(404, 'Token or pool not found.');
-    if (!res.ok) throw new HttpError(502, `Market data provider returned ${res.status}.`);
-    const value = await res.json();
-    if (ttlMs) memo.set(url, { value, exp: Date.now() + ttlMs });
-    return value;
+    throw new HttpError(502, explain(res.status, body, host));
   }
   throw new HttpError(503, 'Market data provider is rate-limiting requests. Try again in a minute.');
 }
 
 /** On-chain DEX data (pools, OHLCV). */
-export const gecko = (path, ttlMs = 0) => getJSON(BASE + path, ttlMs);
+export const gecko = (path, ttlMs = 0) => getJSON('onchain', path, ttlMs);
 /** CoinGecko aggregated market data (rankings, market caps, sparklines). */
-export const cg = (path, ttlMs = 0) => getJSON(CG_BASE + path, ttlMs);
+export const cg = (path, ttlMs = 0) => getJSON('cg', path, ttlMs);
 
 function poolFromIncluded(p) {
   const a = p.attributes || {};

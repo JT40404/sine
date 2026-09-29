@@ -1,4 +1,4 @@
-import { tokenWithPools, candles, pickInterval, isMint, send, fail, HttpError, SOURCE, MIN_CANDLES } from './_lib/gecko.js';
+import { tokenWithPools, candles, pickInterval, isMint, send, fail, HttpError, sourceName, MIN_CANDLES } from './_lib/gecko.js';
 
 /**
  * GET /api/market?address=<mint>&interval=1s|15s|30s|1m|5m|15m|1h|4h|12h|1d
@@ -23,7 +23,7 @@ export default async function handler(req, res) {
       intervalLabel: iv.label,
       intervalSec: iv.sec,
       intervalHours: iv.sec / 3600,
-      source: SOURCE,
+      source: sourceName(),
       updatedAt: new Date().toISOString(),
       timestamps: bars.map((c) => c.t),
       closes: bars.map((c) => c.c),

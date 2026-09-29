@@ -12,8 +12,8 @@
   var reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
   var testText = F.testSignal().join("\n");
 
-  var state = { mode: "none", ca: "", interval: "15m", basket: "top50-cap", timer: null, busy: false, updatedAt: null, eco: null, secondsOK: false };
-  var BASKETS = ["top50-cap", "top50-equal", "core"];
+  var state = { mode: "none", ca: "", interval: "15m", basket: "top-cap", timer: null, busy: false, updatedAt: null, eco: null, secondsOK: false };
+  var BASKETS = ["top-cap", "top-equal", "core"];
   var isTop = function () { return state.basket !== "core"; };
   var view = { key: null, chart: null, bars: null, dom: null, cycle: null };
 
@@ -294,7 +294,7 @@
     var locked = eco && isTop();
     $("interval").disabled = locked;
     $("interval").value = locked ? "1h" : state.interval;
-    $("interval").title = locked ? "The Top 50 index is built from CoinGecko's hourly 7-day price history." : "";
+    $("interval").title = locked ? "The Top 20 index is built from CoinGecko's hourly 7-day price history." : "";
   }
 
   /** columns: [{ label, width }]; rows: arrays of cells (string or { text, href }). */
@@ -388,12 +388,12 @@
           return;
         }
         var useTop = state.interval === "1h";
-        var ecoKey = useTop ? "top50" : state.interval;
-        $("v-corr-label").textContent = "Correlation with " + (useTop ? "Top 50 index" : "core basket index");
-        $("v-phase-label").textContent = "Phase vs. " + (useTop ? "Top 50" : "core basket") + " at this token’s f₁";
-        $("v-period-label").textContent = (useTop ? "Top 50" : "Core basket") + "’s own dominant period";
+        var ecoKey = useTop ? "top" : state.interval;
+        $("v-corr-label").textContent = "Correlation with " + (useTop ? "Top 20 index" : "core basket index");
+        $("v-phase-label").textContent = "Phase vs. " + (useTop ? "Top 20" : "core basket") + " at this token’s f₁";
+        $("v-period-label").textContent = (useTop ? "Top 20" : "Core basket") + "’s own dominant period";
         var fresh = state.eco && state.eco.key === ecoKey && Date.now() - state.eco.at < 300000;
-        var got = fresh ? Promise.resolve(state.eco.data) : getJSON(useTop ? "/api/top50?weight=cap" : "/api/ecosystem?interval=" + state.interval).then(function (e) {
+        var got = fresh ? Promise.resolve(state.eco.data) : getJSON(useTop ? "/api/top?weight=cap" : "/api/ecosystem?interval=" + state.interval).then(function (e) {
           state.eco = { key: ecoKey, at: Date.now(), data: e };
           return e;
         });
@@ -408,17 +408,17 @@
   }
 
   /* ================= ecosystem pulse ================= */
-  function loadEcosystem(quiet) { return isTop() ? loadTop50(quiet) : loadCore(quiet); }
+  function loadEcosystem(quiet) { return isTop() ? loadTop(quiet) : loadCore(quiet); }
 
-  function loadTop50(quiet) {
+  function loadTop(quiet) {
     if (state.busy) return;
     state.busy = true;
-    var weight = state.basket === "top50-equal" ? "equal" : "cap";
+    var weight = state.basket === "top-equal" ? "equal" : "cap";
     var key = "t:" + weight;
-    if (!quiet) { status("Loading the top 50 Solana tokens…", "info"); $("app-grid").classList.add("loading"); }
-    getJSON("/api/top50?weight=" + weight)
+    if (!quiet) { status("Loading the top Solana tokens…", "info"); $("app-grid").classList.add("loading"); }
+    getJSON("/api/top?weight=" + weight)
       .then(function (eco) {
-        if (key !== "t:" + (state.basket === "top50-equal" ? "equal" : "cap") || !isTop()) return;
+        if (key !== "t:" + (state.basket === "top-equal" ? "equal" : "cap") || !isTop()) return;
         var wlabel = weight === "cap" ? "MARKET-CAP WEIGHTED, " + Math.round(eco.capLimit * 100) + "% CAP" : "EQUAL WEIGHTED";
         $("meta").textContent = "ECOSYSTEM PULSE · TOP " + eco.count + " SOLANA TOKENS · " + wlabel + " · HOURLY, 7 DAYS";
         $("title").textContent = "Solana market · Top " + eco.count;
@@ -442,7 +442,7 @@
         var dIdx = F.detrendLog(eco.index), k0 = res.peaks[0].k, P0 = res.peaks[0].period, phIdx = F.binPhase(dIdx, k0);
         var rows = eco.tokens.map(function (t) {
           var v = tokenVsIndex(t.closes, eco.index, 1, k0, P0, phIdx, dIdx);
-          var sym = t.mint ? { text: "$" + t.symbol, href: "/analyzer?ca=" + encodeURIComponent(t.mint) + "&interval=1h" } : "$" + t.symbol;
+          var sym = { text: "$" + t.symbol, href: "/api/open?id=" + encodeURIComponent(t.id) + "&interval=1h" };
           return [String(t.rank || "—"), sym, (t.weight * 100).toFixed(1) + "%",
             { text: pct(t.change24h), cls: t.change24h === null ? "" : t.change24h >= 0 ? "up" : "down" },
             v.own, v.corr, v.phase];
@@ -452,7 +452,8 @@
           { label: "rank", width: "0.5fr" }, { label: "token", width: "1fr" }, { label: "weight", width: "0.8fr" },
           { label: "24h", width: "0.8fr" }, { label: "own f₁ period", width: "1fr" }, { label: "correlation", width: "0.8fr" },
           { label: "phase vs. index f₁", width: "1.5fr" }], rows);
-        var note = "Ranked by market cap from CoinGecko’s Solana ecosystem list; stablecoins, wrapped and bridged assets and liquid-staking tokens are excluded. " +
+        var note = "Ranked by market cap from CoinGecko’s Solana ecosystem list. Left out: stablecoins, wrapped BTC/ETH, tokenized gold, and liquid-staking tokens (anything whose price tracks SOL almost exactly)" +
+          (eco.skipped && eco.skipped.length ? " — this time: " + eco.skipped.map(function (x) { return "$" + x.symbol; }).join(", ") : "") + ". " +
           (weight === "cap" ? "Weights follow market cap, capped at " + Math.round(eco.capLimit * 100) + "% per token so SOL doesn’t become the whole index. " : "Every token counts equally. ") +
           "Correlation is between detrended log prices; phase compares each token to the index at its dominant frequency (" + fmtDur(P0) + "). Click a token to open it in the contract lens.";
         $("basket-note").textContent = note;
@@ -597,7 +598,7 @@
   var iv = params.get("interval") || legacy[params.get("window") || ""] || "15m";
   if (INTERVAL_IDS.indexOf(iv) < 0) iv = "15m";
   var ca = (params.get("ca") || "").trim();
-  var bk = params.get("basket");
+  var bk = { "top50-cap": "top-cap", "top50-equal": "top-equal" }[params.get("basket")] || params.get("basket");
   if (bk && BASKETS.indexOf(bk) >= 0) state.basket = bk;
   $("series").value = testText;
   applyCapabilities(false);
@@ -610,7 +611,11 @@
     }
     state.interval = iv;
     $("interval").value = iv;
-    if (params.get("mode") === "ecosystem") { state.mode = "ecosystem"; go(); }
+    if (params.get("mode") === "ecosystem") {
+      state.mode = "ecosystem"; go();
+      var missing = params.get("missing");
+      if (missing) setTimeout(function () { status("CoinGecko doesn’t list a Solana contract address for “" + missing + "”, so it can’t be opened in the contract lens.", "info"); }, 2500);
+    }
     else if (MINT.test(ca)) { state.mode = "contract"; state.ca = ca; $("ca").value = ca; go(); }
     else {
       if (ca) $("ca").value = ca;

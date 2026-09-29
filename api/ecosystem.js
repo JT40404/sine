@@ -1,5 +1,5 @@
 import BASKET from './_lib/basket.js';
-import { gecko, candles, pickInterval, send, fail, HttpError, SOURCE } from './_lib/gecko.js';
+import { gecko, candles, pickInterval, send, fail, HttpError, sourceName } from './_lib/gecko.js';
 
 /**
  * GET /api/ecosystem?interval=1m|5m|15m|1h|4h|12h|1d  (second-level intervals aren't offered: too many upstream calls)
@@ -51,7 +51,7 @@ export default async function handler(req, res) {
 
     send(res, {
       interval: w.id, intervalLabel: w.label, intervalSec: w.sec, intervalHours: w.sec / 3600,
-      source: SOURCE, updatedAt: new Date().toISOString(),
+      source: sourceName(), updatedAt: new Date().toISOString(),
       timestamps: grid, index, tokens, dropped,
     }, Math.max(60, w.cache));
   } catch (e) { fail(res, e); }
