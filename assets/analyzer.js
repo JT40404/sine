@@ -734,7 +734,14 @@
     } else { ["s-sig", "s-kss", "s-break"].forEach(function (id) { $(id).textContent = "—"; }); }
 
     try { view.stft = F.stft(xs, dtHours, p0.period); } catch (e) { view.stft = null; }
-    try { view.stress = F.stressIndex(xs); } catch (e) { view.stress = null; }
+    try {
+      // stress = slow pressure the rhythms DON'T explain: with a real rhythm (moderate+), remove it first
+      var useResid = strengthOf(res).level >= 2;
+      var model = useResid ? F.harmonicFit(xs.map(Math.log), res.peaks.map(function (pk) { return dtHours / pk.period; })) : null;
+      var sIn = model ? xs.map(function (c, i) { return Math.exp(Math.log(c) - model(i)); }) : xs;   // exact least-squares fit at the refined frequencies
+      view.stress = F.stressIndex(sIn);
+      if (view.stress && useResid) view.stress.lastMove = xs[xs.length - 1] / xs[Math.max(0, xs.length - 1 - view.stress.L)] - 1;
+    } catch (e) { view.stress = null; }
     drawStress(view.stress, dtHours);
     view.res = res;
     if (fresh) { view.proj = null; $("proj-fig").hidden = true; }

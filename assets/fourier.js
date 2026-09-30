@@ -495,7 +495,7 @@
     nullv.sort(function (a, b) { return a - b; });
     var p = (ge + 1) / (M + 1);
     var q95 = nullv[Math.floor(0.95 * M)];
-    var level = (p <= 0.05 && histPct >= 0.8) ? 2 : (p <= 0.10 || histPct >= 0.9) ? 1 : 0;
+    var level = (p <= 0.05 && histPct >= 0.8) ? 2 : ((p <= 0.10 || histPct >= 0.9) && now > lowK / half) ? 1 : 0;   // elevated also needs above-chance share
     var lastMove = 0; for (t = r.length - L; t < r.length; t++) lastMove += r[t];
     return { series: series, now: now, p: p, histPct: histPct, q95: q95, expected: lowK / half, L: L, lowK: lowK, level: level, lastMove: Math.exp(lastMove) - 1 };
   }

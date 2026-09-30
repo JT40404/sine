@@ -5,7 +5,11 @@
  * address here, the site shows "Address announced at launch" instead of a placeholder.
  */
 window.SINE_CONFIG = {
+<<<<<<< HEAD
   tokenAddress: "",
+=======
+  tokenAddress: "PASTE_SINE_MINT_ADDRESS_HERE",
+>>>>>>> 60a6356 (Stress check fixes)
   tokenSymbol: "$SINE",
 
   links: {
