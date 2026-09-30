@@ -103,7 +103,7 @@
       <figure class="panel-2 chart" id="chart-fig">
         <div class="top">
           <figcaption>
-            <span class="chart-waves-only"><span class="simple-only">Price swings vs. the rhythm SINE found</span><span class="detail-only">Detrended log price vs. reconstructed signal</span> <button type="button" class="tip" data-tip="detrended" aria-label="What is this chart?">?</button></span>
+            <span class="chart-waves-only"><span class="simple-only">Price swings vs. the rhythm SINE found</span><span class="detail-only">Log price minus Fourier trend vs. reconstructed signal</span> <button type="button" class="tip" data-tip="detrended" aria-label="What is this chart?">?</button></span>
             <span class="chart-spec-only">Rhythm heatmap <span class="muted">(spectrogram)</span> <button type="button" class="tip" data-tip="spectrogram" aria-label="What is a spectrogram?">?</button></span>
           </figcaption>
           <div class="chart-tools">
@@ -245,6 +245,22 @@
         <p class="how">The dot moves along one full cycle in real time, at the speed SINE measured. Past highs formed near the crest and past lows near the troughs.</p>
       </figure>
 
+      <figure class="panel-2 chart" id="stress-fig" hidden>
+        <figcaption>Stress check <button type="button" class="tip" data-tip="stress" aria-label="What is the stress check?">?</button></figcaption>
+        <svg viewBox="0 0 372 130" role="img" id="st-svg" aria-label="Share of recent return energy in slow moves over time">
+          <line id="st-exp" x1="12" x2="360" stroke="#3A4049" stroke-dasharray="2 4"/>
+          <line id="st-q95" x1="12" x2="360" stroke="#F0A857" stroke-opacity="0.7" stroke-dasharray="5 5"/>
+          <text id="st-q95-t" x="14" text-anchor="start" fill="#F0A857" font-family="IBM Plex Mono, monospace" font-size="10">unusual</text>
+          <text id="st-exp-t" x="14" text-anchor="start" fill="#8A8F98" font-family="IBM Plex Mono, monospace" font-size="10">random churn</text>
+          <path id="st-line" fill="none" stroke="#9DB4FF" stroke-width="1.8"/>
+          <circle id="st-dot" r="5" fill="#9DB4FF" stroke="#0F1114" stroke-width="2"/>
+          <text x="12" y="126" fill="#8A8F98" font-family="IBM Plex Mono, monospace" font-size="10" id="st-x0"></text>
+          <text x="360" y="126" text-anchor="end" fill="#8A8F98" font-family="IBM Plex Mono, monospace" font-size="10">now</text>
+        </svg>
+        <div class="stress-row"><span class="stress-chip" id="st-chip" data-level="0">Calm</span><span class="mono muted" id="st-text">—</span></div>
+        <p class="how">How much of the recent price action is slow, one-directional pressure rather than normal back-and-forth. Research on stock indices found this “low-frequency surge” building ahead of major crises. It flags pressure, not direction or timing.</p>
+      </figure>
+
       <figure class="panel-2 chart detail-only">
         <figcaption>Amplitude spectrum (Hann) <button type="button" class="tip" data-tip="spectrum" aria-label="What is the spectrum?">?</button></figcaption>
         <svg viewBox="0 0 372 200" role="img" aria-label="Amplitude spectrum with the top peaks highlighted">
@@ -274,9 +290,13 @@
           <div><dt>Nyquist limit <button type="button" class="tip" data-tip="nyquist" aria-label="What is the Nyquist limit?">?</button></dt><dd id="s-nyq">—</dd></div>
           <div><dt>Variance explained (top 3) <button type="button" class="tip" data-tip="explained" aria-label="What is variance explained?">?</button></dt><dd id="s-exp">—</dd></div>
           <div><dt>Signal-to-noise <button type="button" class="tip" data-tip="snr" aria-label="What is signal-to-noise?">?</button></dt><dd id="s-snr">—</dd></div>
+          <div class="stack"><dt>Rhythm vs. random walk <button type="button" class="tip" data-tip="randomwalk" aria-label="What is the random-walk test?">?</button></dt><dd id="s-sig">—</dd></div>
+          <div class="stack"><dt>Mean reversion (Fourier KSS) <button type="button" class="tip" data-tip="kss" aria-label="What is the Fourier KSS test?">?</button></dt><dd id="s-kss">—</dd></div>
+          <div class="stack"><dt>Stress (slow-move share of returns) <button type="button" class="tip" data-tip="stress" aria-label="What is the stress check?">?</button></dt><dd id="s-stress">—</dd></div>
+          <div class="stack"><dt>Slow regime shift <button type="button" class="tip" data-tip="smoothbreak" aria-label="What is a slow regime shift?">?</button></dt><dd id="s-break">—</dd></div>
           <div><dt>Last updated</dt><dd id="s-upd">—</dd></div>
         </dl>
-        <p>Log price → linear detrend → Hann window → DFT. Peaks need ≥ 2 full cycles in the window and ≥ 4 samples per cycle; periods refined by parabolic interpolation. Measurements, not financial advice.</p>
+        <p>Log price → Fourier trend (line + slow wave) → Hann window → FFT. Peaks need ≥ 2 cycles (≥ 3 to rank first), ≥ 4 samples per cycle and must stand out from nearby frequencies; periods refined by parabolic interpolation. Significance vs. 200 simulated random walks. Measurements, not financial advice.</p>
       </div>
     </aside>
   </div>
@@ -286,6 +306,7 @@
 </div>
 <script src="/config.js"></script>
 <script src="/assets/site.js"></script>
+<script src="/assets/null-tables.js"></script>
 <script src="/assets/fourier.js"></script>
 <script src="/assets/analyzer.js"></script>
 </body>
