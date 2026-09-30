@@ -1,0 +1,143 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// SINE Stress: low-frequency surge in returns, the SINE site's "Stress check" on every bar.
+// After Jun, Ahn, Kim & Kim (2019), Physica A 526:121015: the low-frequency Fourier components of index
+// returns surged ahead of global financial crises.
+//
+// On every bar, using only the last `Window` log returns up to and including that bar:
+//   remove the mean → DFT → Stress = energy in the slowest Window/8 modes ÷ energy in modes 1 .. Window/2 − 1
+//   Independent returns (random churn) put Window/8 ÷ (Window/2 − 1) there, ≈ 27% for 32. Higher = persistent,
+//   one-directional pressure.
+//   p        = chance of a value this high from independent returns: exactly Beta(a, b) for normal returns,
+//              a = Window/8, b = Window/2 − 1 − a (computed per bar with the binomial identity)
+//   History  = share of the last `History` bars with a lower value
+//   Level    = High (p ≤ 0.05 and History ≥ 80%) / Elevated (p ≤ 0.10 or History ≥ 90%) / Calm
+// The line is green when price rose over the window and red when it fell (the direction of the pressure).
+// It flags pressure, not direction or timing. Same math as indicator/sine-stress.js. Measurement, not financial advice.
+
+//@version=6
+indicator("SINE Stress", shorttitle = "SINE Stress", overlay = false, precision = 2, max_bars_back = 2100)
+
+// ───────────────────────── Inputs
+float src     = input.source(close, "Source")
+int   len     = input.int(32, "Window (returns)", options = [16, 32, 64], tooltip = "Returns in each rolling spectrum. The site uses 32 (16 on short series).")
+int   histLen = input.int(500, "History for percentile (bars)", minval = 50, maxval = 2000)
+int   calcN   = input.int(5000, "Calculate over last N bars", minval = 100, maxval = 50000)
+bool  showBg  = input.bool(true, "Shade Elevated / High")
+bool  showTbl = input.bool(true, "Show stats panel")
+color colUp   = input.color(#26a69a, "Pressure up")
+color colDn   = input.color(#ef5350, "Pressure down")
+color colEl   = input.color(#ffb300, "Elevated")
+color colHi   = input.color(#ef5350, "High")
+
+// ───────────────────────── Helpers
+int lowK = int(len / 8)
+int bB   = int(len / 2) - 1 - lowK
+
+// P(stress ≥ x) for independent normal returns = P(Binomial(lowK + bB − 1, x) ≤ lowK − 1)
+pValue(float x) =>
+    float p = 0.0
+    if x <= 0
+        p := 1.0
+    else if x < 1
+        int n = lowK + bB - 1
+        float coef = 1.0
+        for j = 0 to lowK - 1
+            if j > 0
+                coef := coef * (n - j + 1) / j
+            p += coef * math.pow(x, j) * math.pow(1 - x, n - j)
+    math.min(1.0, math.max(0.0, p))
+
+var float q95 = na
+if barstate.isfirst
+    float lo = 0.0
+    float hi = 1.0
+    for i = 0 to 59
+        float mid = (lo + hi) / 2
+        if pValue(mid) > 0.05
+            lo := mid
+        else
+            hi := mid
+    q95 := (lo + hi) / 2
+
+// ───────────────────────── Per-bar stress
+float r = src > 0 and src[1] > 0 ? math.log(src / src[1]) : na
+
+float stress  = na
+float pv      = na
+float histPct = na
+int   level   = na
+float move    = na
+
+if bar_index > len and bar_index >= last_bar_index - calcN
+    bool  ok = true
+    float m  = 0.0
+    for n = 0 to len - 1
+        float rv = r[len - 1 - n]
+        if na(rv)
+            ok := false
+            break
+        m += rv
+    if ok
+        m := m / len
+        float ss  = 0.0
+        float alt = 0.0
+        for n = 0 to len - 1
+            float v = r[len - 1 - n] - m
+            ss  += v * v
+            alt += n % 2 == 1 ? -v : v
+        float total = (len * ss - alt * alt) / 2     // Parseval: energy in modes 1 .. len/2 − 1
+        float low   = 0.0
+        for k = 1 to lowK
+            float re = 0.0
+            float im = 0.0
+            for n = 0 to len - 1
+                float u = r[len - 1 - n] - m
+                float g = 2.0 * math.pi * k * n / len
+                re += u * math.cos(g)
+                im -= u * math.sin(g)
+            low += re * re + im * im
+        stress := total > 0 ? math.min(1.0, low / total) : 0.0
+        pv     := pValue(stress)
+        int below = 0
+        int cnt   = 0
+        for j = 0 to histLen - 1
+            float v = stress[j]
+            if not na(v)
+                cnt += 1
+                if v < stress
+                    below += 1
+        histPct := cnt > 0 ? float(below) / cnt : na
+        level   := pv <= 0.05 and histPct >= 0.8 ? 2 : pv <= 0.10 or histPct >= 0.9 ? 1 : 0
+        move    := src / src[len] - 1
+
+// ───────────────────────── Plots
+float expected = lowK / (len / 2.0 - 1)
+plot(stress * 100, "Stress", color = move >= 0 ? colUp : colDn, linewidth = 2)
+plot(na(stress) ? na : expected * 100, "Random churn", color = color.new(color.gray, 30), style = plot.style_line)
+plot(na(stress) ? na : q95 * 100, "Chance threshold (p = 0.05)", color = color.new(colHi, 40), style = plot.style_circles, linewidth = 1)
+bgcolor(showBg and level == 2 ? color.new(colHi, 80) : showBg and level == 1 ? color.new(colEl, 88) : na, title = "Level shading")
+
+plot(pv, "p-value", display = display.data_window)
+plot(histPct * 100, "History percentile", display = display.data_window)
+plot(level, "Level (0 Calm, 1 Elevated, 2 High)", display = display.data_window)
+
+alertcondition(level == 2 and nz(level[1]) < 2, "Stress High", "SINE Stress: HIGH (low-frequency surge in returns)")
+alertcondition(level >= 1 and nz(level[1]) < 1, "Stress Elevated", "SINE Stress: Elevated or higher")
+alertcondition(level == 0 and nz(level[1]) > 0, "Stress back to Calm", "SINE Stress: back to Calm")
+
+// ───────────────────────── Stats panel
+var table tbl = table.new(position.top_right, 2, 5, bgcolor = color.new(color.black, 20), border_color = color.new(color.gray, 60), border_width = 1)
+if showTbl and barstate.islast
+    color tc = color.white
+    string lvlTxt = na(level) ? "—" : level == 2 ? "High" : level == 1 ? "Elevated" : "Calm"
+    color  lvlCol = na(level) ? tc : level == 2 ? colHi : level == 1 ? colEl : colUp
+    table.cell(tbl, 0, 0, "SINE Stress", text_color = tc, text_size = size.small)
+    table.cell(tbl, 1, 0, lvlTxt, text_color = lvlCol, text_size = size.small)
+    table.cell(tbl, 0, 1, "Slow-mode share", text_color = tc, text_size = size.small)
+    table.cell(tbl, 1, 1, na(stress) ? "—" : str.tostring(stress * 100, "#") + "% (chance ≈ " + str.tostring(expected * 100, "#") + "%)", text_color = tc, text_size = size.small)
+    table.cell(tbl, 0, 2, "p vs. random", text_color = tc, text_size = size.small)
+    table.cell(tbl, 1, 2, na(pv) ? "—" : pv < 0.01 ? "< 0.01" : str.tostring(pv, "0.00"), text_color = tc, text_size = size.small)
+    table.cell(tbl, 0, 3, "vs. own history", text_color = tc, text_size = size.small)
+    table.cell(tbl, 1, 3, na(histPct) ? "—" : str.tostring(histPct * 100, "#") + "th pct", text_color = tc, text_size = size.small)
+    table.cell(tbl, 0, 4, "Pressure", text_color = tc, text_size = size.small)
+    table.cell(tbl, 1, 4, na(move) ? "—" : (move >= 0 ? "Up " : "Down ") + str.tostring(move * 100, "+#.#;-#.#") + "% over window", text_color = move >= 0 ? colUp : colDn, text_size = size.small)
