@@ -382,3 +382,14 @@ body.chart-waves .chart-spec-only, body.chart-spec .chart-waves-only { display: 
   .site-nav .social-x { width: 30px; height: 30px; }
 }
 @media (max-width: 370px) { .site-header .brand span { font-size: 20px; letter-spacing: 2px; } }
+
+.stats dl div.stack { flex-direction: column; gap: 4px; }
+.stats dl div.stack dd { font-size: 13px; }
+
+/* stress check */
+#st-svg { display: block; width: 100%; height: auto; }
+.stress-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.stress-chip { font-family: var(--mono); font-size: 13px; font-weight: 500; letter-spacing: 1px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--accent); color: var(--accent); text-transform: uppercase; }
+.stress-chip[data-level="1"] { border-color: var(--amber); color: var(--amber); }
+.stress-chip[data-level="2"] { border-color: #F07A6A; color: #F07A6A; background: rgba(240,122,106,0.08); }
+#stress-fig .stress-row .muted { font-size: 12px; }

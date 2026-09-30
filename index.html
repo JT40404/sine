@@ -116,9 +116,9 @@
   </div>
   <ol class="steps">
     <li class="panel"><div class="num">01 · INGEST</div><h3>Pull the data</h3><p>Price, volume and liquidity for the ecosystem basket or one mint address, sampled at a fixed interval.</p></li>
-    <li class="panel"><div class="num">02 · PREPARE</div><h3>Clean the signal</h3><p>Take the log of price, fit and remove the linear trend, then apply a Hann window so the edges don’t leak false frequencies.</p></li>
+    <li class="panel"><div class="num">02 · PREPARE</div><h3>Clean the signal</h3><p>Take the log of price and remove its trend, including slow regime shifts (a line plus one slow Fourier wave), then apply a Hann window so the edges don’t leak false frequencies.</p></li>
     <li class="panel"><div class="num">03 · TRANSFORM</div><h3>Run the transform</h3><p>A discrete Fourier transform projects the series onto sine waves at every frequency it can resolve — from two cycles per window up to the Nyquist limit.</p></li>
-    <li class="panel"><div class="num">04 · MEASURE</div><h3>Report the waves</h3><p>Spectral peaks are located with sub-bin interpolation and reported as frequency, period, amplitude and phase, plus the share of variance each explains.</p></li>
+    <li class="panel"><div class="num">04 · MEASURE</div><h3>Report the waves</h3><p>Each rhythm is tested against 200 simulated random walks, so chance swings aren’t reported as cycles, then reported as frequency, period, amplitude, phase and share of the movement.</p></li>
   </ol>
 </section>
 
@@ -219,6 +219,7 @@
 </div>
 <script src="/config.js"></script>
 <script src="/assets/site.js"></script>
+<script src="/assets/null-tables.js"></script>
 <script src="/assets/fourier.js"></script>
 <script src="/assets/landing.js"></script>
 </body>

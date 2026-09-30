@@ -81,6 +81,76 @@ The wording thresholds live in `summarize()` in `assets/analyzer.js`.
 
 **`/learn`** walks through the idea, every number, every chart, six ways the information can sharpen a read of the market, and what SINE can't do.
 
+## Statistical method (v2): random-walk-aware Fourier analysis
+
+Informed by Öztürk (2025), *Exploring market efficiency in cryptocurrencies: Fourier analysis of non-linear dynamics and breaks*, Istanbul Business Research 54(3), 374–389 ([doi:10.26650/ibr.2025.54.1666799](https://doi.org/10.26650/ibr.2025.54.1666799)). The study tests 25 major coins against the random-walk (weak-form efficiency) null. It finds that tests allowing for **smooth structural breaks** and **non-linear mean reversion** reject the random walk for most coins, where linear tests don't.
+
+**What changed in `assets/fourier.js`:**
+
+1. **Real FFT for any window length.** Radix-2 plus Bluestein's algorithm replaces the direct DFT. It matches a direct DFT to within 1e-11 on every window length the site uses.
+2. **Flexible Fourier trend** (Enders & Lee). log price = a + b·t + c·cos(2πk\*t/N) + s·sin(2πk\*t/N), with k\* searched over 0.1–1.5 by minimum SSR. This removes slow regime shifts before the spectrum, while staying below 1.5 cycles per window so it can't absorb a repeating rhythm.
+3. **Fourier KSS test** (Kapetanios–Shin–Snell 2003; Christopoulos & León-Ledesma 2010). Δe = φ·e³₋₁ + Σ lags on the Fourier-trend residuals. It reports whether price pulls back toward its trend.
+4. **Random-walk significance.** 200 simulated random walks of the same length run through the identical pipeline:
+   - *Rhythm p-value:* peak prominence (power ÷ median power of nearby frequencies), compared with the **maximum** prominence in each simulation. This corrects for "look everywhere and something stands out."
+   - *KSS and regime-shift p-values:* from the same simulations.
+   - *Precomputed tables:* `assets/null-tables.js` covers the standard window lengths, so analysis takes about 3 ms. Other lengths are simulated on demand.
+5. **Ranking.** Significant rhythms that repeat at least 3 times rank first, then significant 2-cycle swings (hard to tell from a slow shift), then the rest.
+
+**Rating.** The strength rating is capped by the rhythm p-value:
+
+| Rhythm p-value | Cap |
+|---|---|
+| ≤ 0.05 | none |
+| ≤ 0.15 | Moderate |
+| ≤ 0.30 | Weak |
+| > 0.30 | No clear rhythm |
+
+**Effect, measured on synthetic data (60 series each):**
+
+| Case | Before | After |
+|---|---|---|
+| Pure random walks rated Moderate or better | 33% | 13% (≈ chance) |
+| Pure random walks rated Strong or better | 10% | 2% |
+| Real rhythms (with noise, random walk, regime shift or boom-bust) | found | found, 100% significant |
+| Rhythm's share of movement under a boom-bust hump | 0.7% | 34.8% |
+
+**Where it shows up.** The Detailed view's Measurement panel adds Rhythm vs. random walk, Mean reversion (Fourier KSS) and Slow regime shift. The summary adds a "Random or not?" paragraph, and `/learn` has a new section, "Is it just a random walk?"
+
+## Stress check (v2.1): low-frequency surge in returns
+
+Adapted from Jun, Ahn, Kim & Kim (2019), *Signal analysis of global financial crises using Fourier series*, Physica A 526, 121015 ([doi:10.1016/j.physa.2019.04.251](https://doi.org/10.1016/j.physa.2019.04.251)). The study turned stock-index returns in a short sliding window (12 monthly returns) into a Fourier series and tracked each mode's amplitude over time. It found that low-frequency components rise more sharply than high-frequency ones as global financial crises approach, across the US, UK and German markets.
+
+**SINE's version** is `stressIndex()` in `assets/fourier.js`:
+
+1. **Rolling spectrum.** Log returns go through a sliding window of L = 32 (16 for short series), step 1, and an FFT at each step.
+2. **Statistic.** The share of return energy in the slowest L/8 modes. Normal random churn puts about 25% there.
+3. **p-value.** A permutation test against the token's own returns in random order, 400 resamples. This keeps fat tails and volatility and removes only timing structure.
+4. **History percentile.** Where the current value sits in its own history over the window.
+5. **Level:**
+
+| Level | Condition |
+|---|---|
+| High | p ≤ 0.05 and history percentile ≥ 80% |
+| Elevated | p ≤ 0.10, or history percentile ≥ 90% |
+| Calm | otherwise |
+
+**Validation on synthetic data** (80 runs each, Calm / Elevated / High):
+
+| Test series | Result |
+|---|---|
+| Random walk, normal returns | 73 / 6 / 1 |
+| Random walk, fat-tailed returns | 75 / 5 / 0 |
+| Volatility spike, random timing | 71 / 5 / 4 |
+| Returns turning persistent | 0 / 0 / 80 |
+
+**Where it shows up:**
+- the "Stress check" panel, with a sparkline and the chance threshold
+- a "Stress check" paragraph in the summary, including the direction of recent pressure
+- a Measurement-panel row
+- a `/learn` section
+
+It flags pressure, not direction or timing. The article is paywalled, so this implements the method as described in its abstract, highlights and section summaries.
+
 ## Heatmap (spectrogram) view
 
 The main chart toggles between **Waves**, which shows price against the rebuilt rhythm, and **Heatmap**, a spectrogram like an audio frequency analyzer. The choice is remembered per browser. It is built as follows:

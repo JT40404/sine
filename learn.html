@@ -81,6 +81,9 @@
     <div class="panel"><dt>MAIN RHYTHM · PERIOD</dt><dd>How long one full swing takes, high to high: <em>“every 36 hours”</em>. In Detailed view it’s also shown as a frequency in µHz, a unit that makes rhythms comparable across any timeframe.</dd></div>
     <div class="panel"><dt>AMPLITUDE</dt><dd>How big the swing is. <em>±4%</em> means price has typically risen about 4% above its trend and fallen about 4% below it each cycle.</dd></div>
     <div class="panel"><dt>SHARE · VARIANCE EXPLAINED</dt><dd>How much of the price’s up-and-down movement a rhythm accounts for. <em>60%</em> means most of the movement follows that rhythm; <em>10%</em> means it’s barely there and news, trades and noise dominate.</dd></div>
+    <div class="panel"><dt>RHYTHM VS. RANDOM WALK</dt><dd>How often 200 simulated random walks produced a rhythm this distinct. <em>p &lt; 0.05</em> means the rhythm is very unlikely to be chance; <em>p above 0.3</em> means it probably is.</dd></div>
+    <div class="panel"><dt>MEAN REVERSION</dt><dd>Whether price tends to pull back toward its trend (<em>mean-reverting</em>) or wander like a random walk. Pull-back is what makes cycles usable.</dd></div>
+    <div class="panel"><dt>STRESS CHECK</dt><dd>How much of recent price action is slow, one-directional pressure rather than normal back-and-forth. <em>Calm</em>, <em>Elevated</em> or <em>High</em>. It flags pressure, not direction.</dd></div>
     <div class="panel"><dt>SIGNAL-TO-NOISE</dt><dd>Rhythmic movement compared with everything else. <em>Above 1</em>, the rhythms outweigh randomness. <em>Below 1</em>, randomness wins.</dd></div>
     <div class="panel"><dt>CYCLE POSITION</dt><dd>Where price sits in its main rhythm right now, moving forward in real time. <em>Rising half</em> or <em>falling half</em>, and how long until the point where past highs or lows formed — if the rhythm holds.</dd></div>
     <div class="panel"><dt>CORRELATION</dt><dd>From −1 to 1: how much a token moves with the market index once trends are removed. <em>0.7+</em> means it largely follows the market; <em>near 0</em> means it does its own thing.</dd></div>
@@ -94,7 +97,7 @@
   <div class="prose">
     <h2>Reading each chart</h2>
     <h3>Price swings vs. rhythm</h3>
-    <p>Grey is the real price with its long-run drift removed, so only the swings are left. Green is the same swings rebuilt from just the three strongest rhythms. When green hugs grey, the price is behaving rhythmically. When grey wanders far from green, something else — news, a big buyer or seller, a new trend — is in charge. The pulsing dot is the live price.</p>
+    <p>Grey is the real price with its long-run drift and any slow regime shift removed, so only the swings are left. Green is the same swings rebuilt from just the three strongest rhythms. When green hugs grey, the price is behaving rhythmically. When grey wanders far from green, something else — news, a big buyer or seller, a new trend — is in charge. The pulsing dot is the live price.</p>
     <h3>Where we are in the main rhythm</h3>
     <p>One full cycle, trough to crest to trough, with a dot that moves in real time at the measured speed. It shows where past highs and lows formed in this rhythm. It is not a guarantee of where the next ones will be.</p>
     <h3>Rhythm heatmap (spectrogram)</h3>
@@ -121,6 +124,37 @@
     <p>This is the raw output of the Fourier transform: every rhythm in the data, slow on the left and fast on the right. One tall bar standing out means a clear dominant rhythm. Many similar small bars mean noise with no clear rhythm.</p>
     <h3>Ecosystem pulse</h3>
     <p>The same analysis applied to the whole market: the top 20 Solana tokens combined into one index. The table shows how each token relates to it — its own rhythm, how closely it follows the market, and whether it tends to move first or later.</p>
+  </div>
+</section>
+
+<section id="random">
+  <div class="prose">
+    <h2>Is it just a random walk?</h2>
+    <p>The efficient-market view says prices move like a <em>random walk</em>: each step is independent of the last, so past prices tell you nothing. The catch is that random walks naturally produce big, smooth swings that <strong>look</strong> like cycles. Any tool that finds rhythms has to prove it isn’t just seeing those chance swings.</p>
+    <p>SINE uses methods from academic research on this question. A 2025 study of 25 major cryptocurrencies (Öztürk, <em>Istanbul Business Research</em>) found that simple tests say most coins behave like random walks. But once the tests allow for <em>slow regime shifts</em> and <em>non-linear</em> behaviour, most coins, including Bitcoin and Solana, turn out to pull back toward their trend rather than wander randomly. SINE builds three of those ideas in:</p>
+    <h3>1. Remove slow regime shifts first</h3>
+    <p>Instead of a straight trend line, SINE fits a line plus one slow wave (the Fourier method of Enders &amp; Lee), then removes it. A slow boom-and-bust across the window can no longer pose as a rhythm. The wave is limited to under 1.5 cycles per window, so it can never swallow a real, repeating rhythm.</p>
+    <h3>2. Test rhythms against random walks</h3>
+    <p>SINE runs 200 simulated random walks of the same length through the <em>exact same analysis</em>. A rhythm only counts as significant if it stands out from its neighbouring frequencies more sharply than chance produced in 95% of those simulations. Rhythms that could easily be chance are rated down or shown as “No clear rhythm”, even if they look convincing on the chart.</p>
+    <h3>3. Check for pull-back (mean reversion)</h3>
+    <p>The Fourier KSS test asks whether price tends to return toward its trend, which is what makes cycles usable, or drifts off like a random walk. You’ll find the result, and the other two, in the Detailed view and the “Random or not?” part of the summary.</p>
+    <p class="muted" style="font-size:14px">Sources: Öztürk, C. (2025). Exploring market efficiency in cryptocurrencies: Fourier analysis of non-linear dynamics and breaks. <em>Istanbul Business Research</em>, 54(3), 374–389. <a href="https://doi.org/10.26650/ibr.2025.54.1666799" target="_blank" rel="noopener">doi:10.26650/ibr.2025.54.1666799</a> · Enders &amp; Lee (2012), <em>Oxford Bulletin of Economics and Statistics</em> · Kapetanios, Shin &amp; Snell (2003), <em>Journal of Econometrics</em> · Christopoulos &amp; León-Ledesma (2010), <em>Journal of International Money and Finance</em>.</p>
+  </div>
+</section>
+
+<section id="stress">
+  <div class="prose">
+    <h2>Stress check: when slow moves take over</h2>
+    <p>Normally, price moves back and forth in no particular order: up a bit, down a bit, like random churn. Before big breaks, that can change. Moves start lining up in the same direction, and slow, persistent pressure takes over from quick noise.</p>
+    <p>A study of US, UK and German stock indices (Jun, Ahn, Kim &amp; Kim, <em>Physica A</em>, 2019) measured exactly this with Fourier analysis. They slid a short window along the index’s returns and tracked each frequency over time. As global financial crises approached, the <strong>low-frequency components rose much more sharply than the high-frequency ones</strong>.</p>
+    <p>SINE’s <strong>Stress check</strong> applies the same idea to crypto candles. It measures what share of recent return “energy” sits in the slowest moves. Normal random churn puts about 25% there. To decide whether a reading is unusual, SINE compares it with the token’s <em>own</em> returns shuffled into random order. That keeps crypto’s large, fat-tailed moves but removes any real pattern in their timing, so a few huge candles alone won’t trigger it. The result is:</p>
+    <ul>
+      <li><strong>Calm:</strong> normal churn.</li>
+      <li><strong>Elevated:</strong> above normal for this token.</li>
+      <li><strong>High:</strong> unusual against shuffled returns <em>and</em> near the top of its own recent history.</li>
+    </ul>
+    <p><strong>What it can’t do:</strong> it flags pressure building, not which way it breaks, how far, or when. The original study used monthly stock-index data around a handful of crises. SINE’s version is an adaptation to much faster crypto data, and on purely random data it raises a false “Elevated” or “High” roughly 5–10% of the time. Treat it as a reason to look closer and size carefully, not as a signal on its own.</p>
+    <p class="muted" style="font-size:14px">Source: Jun, D., Ahn, C., Kim, J. &amp; Kim, G. (2019). Signal analysis of global financial crises using Fourier series. <em>Physica A: Statistical Mechanics and its Applications</em>, 526, 121015. <a href="https://doi.org/10.1016/j.physa.2019.04.251" target="_blank" rel="noopener">doi:10.1016/j.physa.2019.04.251</a></p>
   </div>
 </section>
 
@@ -205,6 +239,7 @@
 </div>
 <script src="/config.js"></script>
 <script src="/assets/site.js"></script>
+<script src="/assets/null-tables.js"></script>
 <script src="/assets/fourier.js"></script>
 <script src="/assets/learn.js"></script>
 </body>

@@ -228,7 +228,11 @@
     volume: ["24h volume", "Dollar value traded in the last 24 hours. Rhythms in actively traded tokens are more meaningful than in quiet ones."],
     index: ["Index level", "The basket’s value, set to 100 at the start of the window. 104 means the basket is up 4% over the window."],
     breadth: ["Breadth", "How many tokens rose vs. fell over 24 hours. Moves with broad participation tend to be sturdier than moves carried by a few tokens."],
-    trend: ["Trend", "The average drift per day underneath the rhythm, from a straight-line fit over the whole window."]
+    trend: ["Trend", "The average drift per day underneath the rhythm. SINE fits it as a straight line plus one slow wave, so gradual regime shifts don’t get mistaken for rhythms."],
+    stress: ["Stress check", "The share of recent return energy in slow, persistent moves (measured with a rolling Fourier spectrum of returns). Normal random churn puts about 25% there; a surge means pressure is building in one direction. Jun, Ahn, Kim & Kim (2019, Physica A) found this low-frequency surge in stock-index returns ahead of major financial crises. SINE compares it with this token’s own returns shuffled into random order, so big candles alone don’t trigger it. It flags pressure, not direction or timing."],
+    randomwalk: ["Rhythm vs. random walk", "A random walk (pure chance) often shows swings that look like cycles. SINE runs 200 simulated random walks through the exact same analysis. The p-value is how often chance alone produced a rhythm this distinct: below 0.05 means the rhythm is very unlikely to be a fluke."],
+    kss: ["Mean reversion (Fourier KSS test)", "Asks whether price pulls back toward its underlying trend or just wanders off like a random walk. Pull-back is what makes cycles usable; pure wandering is what an efficient market looks like. The test allows for slow regime shifts and non-linear behaviour, following Kapetanios–Shin–Snell (2003) and Christopoulos & León-Ledesma (2010), as used by Öztürk (2025) for crypto."],
+    smoothbreak: ["Slow regime shift", "A gradual change in a token’s behaviour across the window — a slow boom-and-bust or a step up. SINE fits it with a single slow wave (the Enders & Lee Fourier method, frequency k*) and removes it first, so it can’t pose as a rhythm. The p-value says whether the shift is bigger than random walks produce."]
   };
   var pop = $("tip-pop"), openTip = null;
   function closeTip() { if (openTip) openTip.setAttribute("aria-expanded", "false"); openTip = null; pop.hidden = true; }
@@ -448,6 +452,31 @@
       fmtUnit(end) + ", likely range " + fmtUnit(dn[H]) + " to " + fmtUnit(up[H]) + ". " + v.text);
   }
 
+  /* ================= stress check (low-frequency surge in returns) ================= */
+  var STRESS_LABEL = ["Calm", "Elevated", "High"];
+  function drawStress(st, dtHours) {
+    var fig = $("stress-fig");
+    if (!st) { fig.hidden = true; $("s-stress").textContent = "—"; return; }
+    fig.hidden = false;
+    var X0 = 12, W = 348, Y0 = 10, YH = 100, n = st.series.length;
+    var top = Math.max(0.6, st.q95 * 1.15, Math.max.apply(null, st.series) * 1.05);
+    var Y = function (v) { return Y0 + (1 - v / top) * YH; };
+    var d = "", step = Math.max(1, Math.floor(n / 240));
+    for (var i = 0; i < n; i += step) d += (i ? "L" : "M") + (X0 + W * i / (n - 1)).toFixed(1) + " " + Y(st.series[i]).toFixed(1) + " ";
+    d += "L" + (X0 + W).toFixed(1) + " " + Y(st.now).toFixed(1);
+    var col = ["#9DB4FF", "#F0A857", "#F07A6A"][st.level];
+    $("st-line").setAttribute("d", d); $("st-line").setAttribute("stroke", col);
+    $("st-dot").setAttribute("cx", X0 + W); $("st-dot").setAttribute("cy", Y(st.now).toFixed(1)); $("st-dot").setAttribute("fill", col);
+    ["st-q95", "st-exp"].forEach(function (id, j) { var y = Y(j ? st.expected : st.q95).toFixed(1); $(id).setAttribute("y1", y); $(id).setAttribute("y2", y); });
+    $("st-q95-t").setAttribute("y", (Y(st.q95) - 4).toFixed(1)); $("st-exp-t").setAttribute("y", (Y(st.expected) + 12).toFixed(1));
+    $("st-x0").textContent = "−" + fmtDur((n - 1) * dtHours);
+    $("st-chip").textContent = STRESS_LABEL[st.level]; $("st-chip").setAttribute("data-level", String(st.level));
+    var mv = st.lastMove * 100;
+    $("st-text").textContent = Math.round(st.now * 100) + "% slow moves (random ≈ " + Math.round(st.expected * 100) + "%) · last " + st.L + " candles " + (mv >= 0 ? "+" : "") + mv.toFixed(1) + "%";
+    $("s-stress").textContent = Math.round(st.now * 100) + "% · p = " + (st.p < 0.01 ? "<0.01" : st.p.toFixed(2)) + " · " + Math.round(st.histPct * 100) + "th pct of window · " + STRESS_LABEL[st.level].toLowerCase();
+    $("st-svg").setAttribute("aria-label", "Stress check: " + STRESS_LABEL[st.level] + ". " + $("st-text").textContent);
+  }
+
   /* ================= plain-English summary ================= */
   var LEVELS = ["No clear rhythm", "Weak", "Moderate", "Strong", "Very strong"];
   function strengthOf(res) {
@@ -455,7 +484,9 @@
     var seen = res.T / res.peaks[0].period;
     if (seen < 2) lvl = Math.min(lvl, 1);        // seen fewer than twice: could be coincidence
     else if (seen < 3) lvl = Math.min(lvl, 2);   // fewer than three repeats: at most moderate
-    return { level: lvl, seen: seen };
+    var p = res.sig ? res.sig.pTop : null;        // chance a random walk shows a rhythm this distinct
+    if (p !== null) { if (p > 0.30) lvl = 0; else if (p > 0.15) lvl = Math.min(lvl, 1); else if (p > 0.05) lvl = Math.min(lvl, 2); }
+    return { level: lvl, seen: seen, p: p };
   }
   function cycleNow() {
     var c = view.cycle;
@@ -484,7 +515,10 @@
 
     // 1. the rhythm
     var r1;
-    if (st.level === 0) {
+    var pct = function (p) { return p < 0.01 ? "under 1%" : "about " + Math.round(p * 100) + "%"; };
+    if (st.level === 0 && st.p !== null && st.p > 0.30) {
+      r1 = name + "’s swings over the last " + win + " are the kind a random walk produces by itself: in 200 simulated random walks, a rhythm this distinct turned up " + pct(st.p) + " of the time. Patterns you think you see on the chart are probably noise.";
+    } else if (st.level === 0) {
       r1 = name + "’s moves over the last " + win + " look mostly random: no rhythm explains more than " + Math.max(sharePct, 1) + "% of them. Patterns you think you see on the chart are probably noise.";
     } else {
       r1 = name + " has moved in a " + LEVELS[st.level].toLowerCase() + " rhythm: roughly every " + P + " it swings about ±" + amp + "% around its trend. " +
@@ -499,7 +533,35 @@
         pers.share >= 0.4 ? "present most of the time (" + ps + "% of the window)" : "on and off — clearly present in only " + ps + "% of the window") +
         (pers.change >= 1.4 ? ", and it has been getting stronger lately." : pers.change <= 0.7 ? ", and it has been fading lately." : ".");
     }
+    if (st.level > 0 && st.p !== null) {
+      r1 += st.p <= 0.05 ? " Tested against 200 simulated random walks, a rhythm this distinct appeared by chance " + pct(st.p) + " of the time — it’s statistically real."
+        : " In 200 simulated random walks a rhythm this distinct appeared " + pct(st.p) + " of the time, so it’s suggestive rather than proven.";
+    }
     out.push(["The rhythm", r1]);
+
+    // 1b. random or not? (Fourier KSS mean-reversion test + smooth regime shift, after Öztürk 2025)
+    if (res.sig) {
+      var rk = res.sig.pKss <= 0.05
+        ? "Price tends to pull back toward its underlying trend instead of wandering off (Fourier KSS test, " + (res.sig.pKss < 0.01 ? "p < 0.01" : "p ≈ " + res.sig.pKss.toFixed(2)) + "). That non-random behaviour is what makes cycles usable at all — a 2025 study found the same for most major coins."
+        : (st.p !== null && st.p <= 0.05
+          ? "The pull-back test is inconclusive here (Fourier KSS test, p ≈ " + res.sig.pKss.toFixed(2) + "): between swings, price drifts rather than snapping back toward its trend. The rhythm itself is real, but its timing may slip."
+          : "Price wanders around its trend much like a random walk (Fourier KSS test, p ≈ " + res.sig.pKss.toFixed(2) + "), which is what an efficient market looks like. Expect any cycle here to be unreliable.");
+      if (res.sig.pBreak <= 0.05) rk += " SINE also found a slow regime shift over the window (about " + res.trend.k.toFixed(1) + " of a cycle) and removed it before measuring the rhythms, so it can’t pose as one.";
+      out.push(["Random or not?", rk]);
+    }
+
+    // 1c. stress check (low-frequency surge in returns, after Jun et al. 2019)
+    var sx = view.stress;
+    if (sx) {
+      var shp = Math.round(sx.now * 100), ex = Math.round(sx.expected * 100), mv = sx.lastMove * 100;
+      var dir = Math.abs(mv) < 0.5 ? "" : " The recent pressure has been " + (mv > 0 ? "upward" : "downward") + " (" + (mv > 0 ? "+" : "") + mv.toFixed(1) + "% over the last " + sx.L + " candles).";
+      var rs = sx.level === 2
+        ? "High. Recent returns are dominated by slow, persistent moves: " + shp + "% of their energy, against about " + ex + "% for normal random churn, which is more than shuffled versions of this token’s own returns produce " + (sx.p < 0.01 ? "over 99%" : "about " + Math.round((1 - sx.p) * 100) + "%") + " of the time, and near the top of its own recent history. Research on stock indices found this kind of low-frequency surge building ahead of major crises. It signals pressure building in one direction — not how far it runs or when it breaks."
+        : sx.level === 1
+        ? "Elevated. Slow, persistent moves make up " + shp + "% of recent return energy (normal random churn ≈ " + ex + "%), above what’s usual for this token. Worth watching."
+        : "Calm. Recent returns look like normal back-and-forth churn: slow moves make up " + shp + "% of their energy, close to the ≈ " + ex + "% expected by chance.";
+      out.push(["Stress check", rs + (sx.level > 0 ? dir : "")]);
+    }
 
     // 2. right now + trend
     var dtH = res.dt, trendDay = (Math.exp(res.trendB * 24 / dtH) - 1) * 100;
@@ -589,11 +651,11 @@
     $("rows").textContent = "";
     $("summary").hidden = true;
     state.lastRes = null;
-    ["dom-uhz", "dom-simple", "dom-swing", "dom-period", "s-n", "s-df", "s-nyq", "s-exp", "s-snr", "cyc-text"].forEach(function (id) { $(id).textContent = "—"; });
+    ["dom-uhz", "dom-simple", "dom-swing", "dom-period", "s-n", "s-df", "s-nyq", "s-exp", "s-snr", "s-sig", "s-kss", "s-break", "s-stress", "cyc-text"].forEach(function (id) { $(id).textContent = "—"; });
     $("dom-uhz").removeAttribute("data-v");
     ["y-top", "y-bot", "x-start", "f-min", "f-max", "x-live"].forEach(function (id) { $(id).textContent = ""; });
     view = { key: null, chart: null, bars: null, dom: null, cycle: null, stft: null, specImg: null, proj: null };
-    $("proj-fig").hidden = true;
+    $("proj-fig").hidden = true; $("stress-fig").hidden = true;
     var cv = $("spec-canvas"); cv.getContext("2d").clearRect(0, 0, cv.width, cv.height);
   }
 
@@ -616,7 +678,7 @@
       liveY: null
     };
     if (opts.live && opts.live.c > 0) {
-      var dLive = Math.log(opts.live.c) - (res.trendA + res.trendB * res.N);
+      var dLive = Math.log(opts.live.c) - res.trendAt(res.N);
       target.liveY = clampY(MID - s * dLive);
     }
     var shift = 0, ts = opts.timestamps;
@@ -664,8 +726,16 @@
     $("s-nyq").textContent = fmtFreq(res.nyq);
     $("s-exp").textContent = (res.explained * 100).toFixed(1) + "%";
     $("s-snr").textContent = res.snr.toFixed(2) + " : 1";
+    var fp = function (p) { return p < 0.01 ? "p < 0.01" : "p = " + p.toFixed(2); };
+    if (res.sig) {
+      $("s-sig").textContent = fp(res.sig.pTop) + (res.sig.pTop <= 0.05 ? " · significant" : " · not significant");
+      $("s-kss").textContent = "t = " + res.kssT.toFixed(2) + " · " + fp(res.sig.pKss) + (res.sig.pKss <= 0.05 ? " · mean-reverting" : " · random-walk-like");
+      $("s-break").textContent = "k* = " + res.trend.k.toFixed(1) + " · " + fp(res.sig.pBreak) + (res.sig.pBreak <= 0.05 ? " · removed" : " · minor");
+    } else { ["s-sig", "s-kss", "s-break"].forEach(function (id) { $(id).textContent = "—"; }); }
 
     try { view.stft = F.stft(xs, dtHours, p0.period); } catch (e) { view.stft = null; }
+    try { view.stress = F.stressIndex(xs); } catch (e) { view.stress = null; }
+    drawStress(view.stress, dtHours);
     view.res = res;
     if (fresh) { view.proj = null; $("proj-fig").hidden = true; }
     var projKey = opts.key, projXs = xs;
