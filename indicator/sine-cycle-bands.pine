@@ -1,0 +1,284 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// SINE Cycle Bands: Fourier cycle bands in the style of Bollinger Bands.
+//
+// On every bar, using only the last `Window` bars up to and including that bar:
+//   log price → least-squares trend line → Hann window → DFT amplitudes
+//   → the strongest rhythms (≥ 2 cycles and ≥ 4 bars per cycle in the window), refined by parabolic interpolation
+//   → least-squares fit of the trend-removed price to those sine waves
+//   Midline  = trend + fitted rhythms at this bar (green while the rhythm rises, red while it falls)
+//   Bands    = midline × exp(± mult × σ), σ = what the rhythms leave unexplained
+//   Strength = share of trend-removed movement the rhythms explain
+// Nothing uses future bars, so past values never repaint. The projection is drawn on the last bar only.
+// Same math as indicator/sine-bands.js in the SINE repository. Measurement, not financial advice.
+
+//@version=6
+indicator("SINE Cycle Bands", shorttitle = "SINE", overlay = true, max_bars_back = 520, max_polylines_count = 6)
+
+// ───────────────────────── Inputs
+const string GC = "Cycles"
+float src      = input.source(close, "Source", group = GC)
+int   len      = input.int(128, "Window (bars)", minval = 32, maxval = 512, group = GC, tooltip = "Bars analyzed at each point. A rhythm must repeat at least twice inside the window to be found, so the longest detectable cycle is half the window.")
+int   nPeaks   = input.int(3, "Rhythms to fit", minval = 1, maxval = 5, group = GC)
+float mult     = input.float(2.0, "Band width (× σ)", minval = 0.1, step = 0.1, group = GC)
+int   history  = input.int(2000, "Calculate over last N bars", minval = 50, maxval = 20000, group = GC, tooltip = "Limits the work on long charts. Older bars show nothing.")
+
+const string GP = "Projection"
+bool  showProj = input.bool(true, "Show 'if the pattern holds' projection", group = GP)
+int   projLen  = input.int(0, "Projection length (bars, 0 = one main cycle)", minval = 0, maxval = 500, group = GP, tooltip = "0 projects one main cycle, capped at a fifth of the window.")
+
+const string GD = "Display"
+bool  showTurns = input.bool(true, "Mark rhythm crests and troughs", group = GD)
+bool  showTable = input.bool(true, "Show stats panel", group = GD)
+color colUp     = input.color(#26a69a, "Rhythm rising", group = GD)
+color colDn     = input.color(#ef5350, "Rhythm falling", group = GD)
+color colBand   = input.color(#7e57c2, "Bands", group = GD)
+
+// ───────────────────────── Helpers
+// Fitted rhythms (trend-removed log price) at sample n of a window of N bars.
+fitAt(array<float> beta, array<float> freqs, float n, int N) =>
+    float v = beta.get(0) + beta.get(1) * n / N
+    int nf = freqs.size()
+    if nf > 0
+        for q = 0 to nf - 1
+            float g = 2.0 * math.pi * freqs.get(q) * n
+            v += beta.get(2 + 2 * q) * math.cos(g) + beta.get(3 + 2 * q) * math.sin(g)
+    v
+
+fmtPeriod(float bars) =>
+    float sec = bars * timeframe.in_seconds()
+    sec < 3600 ? str.tostring(sec / 60, "#.#") + " min" : sec < 72 * 3600 ? str.tostring(sec / 3600, "#.#") + " h" : str.tostring(sec / 86400, "#.##") + " d"
+
+// ───────────────────────── Per-bar analysis
+int N    = len
+int kMax = math.floor(N / 4)
+
+var array<float> hann = array.new_float(0)
+if hann.size() == 0
+    for n = 0 to N - 1
+        hann.push(0.5 - 0.5 * math.cos(2.0 * math.pi * n / (N - 1)))
+
+var array<float> y   = array.new_float(N, 0.0)
+var array<float> d   = array.new_float(N, 0.0)
+var array<float> w   = array.new_float(N, 0.0)
+var array<float> amp = array.new_float(kMax + 2, 0.0)
+
+var polyline projMid = na
+var polyline projUp  = na
+var polyline projLo  = na
+var table    tbl     = table.new(position.top_right, 2, 6, bgcolor = color.new(color.black, 20), border_color = color.new(color.gray, 60), border_width = 1)
+
+float mid      = na
+float upper    = na
+float lower    = na
+float cycSlope = na
+float strength = na
+float mainP    = na
+float cycles   = na
+float trendB   = na
+string turnTxt = "—"
+
+if bar_index >= N - 1 and bar_index >= last_bar_index - history
+    // 1. log price and its least-squares trend line
+    bool okData = true
+    float sy  = 0.0
+    float sxy = 0.0
+    for n = 0 to N - 1
+        float p = src[N - 1 - n]
+        if na(p) or p <= 0
+            okData := false
+            break
+        float v = math.log(p)
+        y.set(n, v)
+        sy  += v
+        sxy += n * v
+    if okData
+        float sx  = N * (N - 1) / 2.0
+        float sxx = (N - 1) * N * (2 * N - 1) / 6.0
+        float b   = (N * sxy - sx * sy) / (N * sxx - sx * sx)
+        float a   = (sy - b * sx) / N
+        float varSum = 0.0
+        for n = 0 to N - 1
+            float dv = y.get(n) - (a + b * n)
+            d.set(n, dv)
+            w.set(n, dv * hann.get(n))
+            varSum += dv * dv
+
+        // 2. Hann-windowed DFT amplitudes, k = 1 .. kMax + 1 (rotating phasor, no trig per sample)
+        for k = 1 to kMax + 1
+            float cd = math.cos(2.0 * math.pi * k / N)
+            float sd = math.sin(2.0 * math.pi * k / N)
+            float c  = 1.0
+            float s  = 0.0
+            float re = 0.0
+            float im = 0.0
+            for n = 0 to N - 1
+                float wv = w.get(n)
+                re += wv * c
+                im -= wv * s
+                float cn = c * cd - s * sd
+                s := s * cd + c * sd
+                c := cn
+            amp.set(k, 4.0 * math.sqrt(re * re + im * im) / N)
+
+        // 3. strongest spectral peaks, k = 2 .. kMax
+        array<int> chosen = array.new_int(0)
+        for q = 1 to nPeaks
+            int   best  = -1
+            float bestA = 0.0
+            for k = 2 to kMax
+                float ak = amp.get(k)
+                if ak > amp.get(k - 1) and ak >= amp.get(k + 1) and ak > bestA and not chosen.includes(k)
+                    best  := k
+                    bestA := ak
+            if best > 0
+                chosen.push(best)
+        array<float> freqs = array.new_float(0)
+        if chosen.size() > 0
+            for i = 0 to chosen.size() - 1
+                int   k   = chosen.get(i)
+                float la  = math.log(math.max(amp.get(k - 1), 1e-300))
+                float lb  = math.log(math.max(amp.get(k), 1e-300))
+                float lc  = math.log(math.max(amp.get(k + 1), 1e-300))
+                float den = la - 2 * lb + lc
+                float dl  = den != 0 ? 0.5 * (la - lc) / den : 0.0
+                dl := math.max(-0.5, math.min(0.5, dl))
+                freqs.push((k + dl) / N)
+
+        // 4. least-squares fit of the trend-removed price to those rhythms (Gauss–Jordan)
+        array<float> beta = array.new_float(2, 0.0)
+        int nf = freqs.size()
+        if nf > 0
+            int m  = 2 + 2 * nf
+            int W  = m + 1
+            array<float> A = array.new_float(m * W, 0.0)
+            array<float> r = array.new_float(m, 0.0)
+            for n = 0 to N - 1
+                r.set(0, 1.0)
+                r.set(1, float(n) / N)
+                for q = 0 to nf - 1
+                    float g = 2.0 * math.pi * freqs.get(q) * n
+                    r.set(2 + 2 * q, math.cos(g))
+                    r.set(3 + 2 * q, math.sin(g))
+                float dv = d.get(n)
+                for i = 0 to m - 1
+                    float ri = r.get(i)
+                    for j = i to m - 1    // upper triangle only; mirrored below
+                        A.set(i * W + j, A.get(i * W + j) + ri * r.get(j))
+                    A.set(i * W + m, A.get(i * W + m) + ri * dv)
+            for i = 1 to m - 1
+                for j = 0 to i - 1
+                    A.set(i * W + j, A.get(j * W + i))
+            bool solved = true
+            for col = 0 to m - 1
+                int piv = col
+                for i = col + 1 to m - 1
+                    if i < m and math.abs(A.get(i * W + col)) > math.abs(A.get(piv * W + col))
+                        piv := i
+                if piv != col
+                    for j = 0 to W - 1
+                        float t = A.get(col * W + j)
+                        A.set(col * W + j, A.get(piv * W + j))
+                        A.set(piv * W + j, t)
+                float pv = A.get(col * W + col)
+                if math.abs(pv) < 1e-12
+                    solved := false
+                    break
+                for i = 0 to m - 1
+                    if i != col
+                        float f = A.get(i * W + col) / pv
+                        if f != 0
+                            for j = col to W - 1
+                                A.set(i * W + j, A.get(i * W + j) - f * A.get(col * W + j))
+            if solved
+                beta := array.new_float(0)
+                for i = 0 to m - 1
+                    beta.push(A.get(i * W + m) / A.get(i * W + i))
+            else
+                freqs := array.new_float(0)
+
+        // 5. midline, bands, strength
+        float rss = 0.0
+        for n = 0 to N - 1
+            float e = d.get(n) - fitAt(beta, freqs, n, N)
+            rss += e * e
+        float sigma  = math.sqrt(rss / N)
+        float fEnd   = fitAt(beta, freqs, N - 1, N)
+        float midLog = a + b * (N - 1) + fEnd
+        mid      := math.exp(midLog)
+        upper    := math.exp(midLog + mult * sigma)
+        lower    := math.exp(midLog - mult * sigma)
+        cycSlope := fEnd - fitAt(beta, freqs, N - 2, N)
+        strength := varSum > 0 ? math.max(0.0, 1 - rss / varSum) : 0.0
+        trendB   := b
+        if freqs.size() > 0
+            mainP  := 1.0 / freqs.get(0)
+            cycles := N * freqs.get(0)
+
+        // 6. last bar: next turn, projection
+        if barstate.islast and freqs.size() > 0
+            bool  rising = cycSlope > 0
+            float prevF  = fEnd
+            for h = 1 to math.ceil(mainP)
+                float curF = fitAt(beta, freqs, N - 1 + h, N)
+                if rising ? curF < prevF : curF > prevF
+                    turnTxt := (rising ? "Crest" : "Trough") + " in ~" + str.tostring(h - 1) + " bars"
+                    break
+                prevF := curF
+
+            polyline.delete(projMid)
+            polyline.delete(projUp)
+            polyline.delete(projLo)
+            if showProj
+                int   H   = projLen > 0 ? projLen : math.max(3, math.round(math.min(mainP, N / 5.0)))
+                float pin = math.log(src) - midLog
+                array<chart.point> pm = array.new<chart.point>(0)
+                array<chart.point> pu = array.new<chart.point>(0)
+                array<chart.point> pl = array.new<chart.point>(0)
+                for h = 0 to H
+                    float v = a + b * (N - 1 + h) + fitAt(beta, freqs, N - 1 + h, N) + pin
+                    pm.push(chart.point.from_index(bar_index + h, math.exp(v)))
+                    pu.push(chart.point.from_index(bar_index + h, math.exp(v + mult * sigma)))
+                    pl.push(chart.point.from_index(bar_index + h, math.exp(v - mult * sigma)))
+                projMid := polyline.new(pm, line_color = color.new(colBand, 0), line_style = line.style_dashed, line_width = 2)
+                projUp  := polyline.new(pu, line_color = color.new(colBand, 50), line_style = line.style_dotted)
+                projLo  := polyline.new(pl, line_color = color.new(colBand, 50), line_style = line.style_dotted)
+
+// ───────────────────────── Plots
+pMid = plot(mid,   "Midline", color = cycSlope > 0 ? colUp : colDn, linewidth = 2)
+pUp  = plot(upper, "Upper band", color = color.new(colBand, 30))
+pLo  = plot(lower, "Lower band", color = color.new(colBand, 30))
+fill(pUp, pLo, color = color.new(colBand, 92), title = "Band fill")
+
+bool crest  = cycSlope[1] > 0 and cycSlope <= 0
+bool trough = cycSlope[1] < 0 and cycSlope >= 0
+plotshape(showTurns and crest,  "Rhythm crest",  shape.triangledown, location.abovebar, colDn, size = size.tiny)
+plotshape(showTurns and trough, "Rhythm trough", shape.triangleup,   location.belowbar, colUp, size = size.tiny)
+
+// Data window / alerts helpers (not drawn on the chart)
+plot(strength * 100, "Rhythm strength %", display = display.data_window)
+plot(mainP, "Main cycle (bars)", display = display.data_window)
+
+alertcondition(ta.crossover(src, upper),  "Price above upper band", "SINE: price closed above the upper cycle band")
+alertcondition(ta.crossunder(src, lower), "Price below lower band", "SINE: price closed below the lower cycle band")
+alertcondition(crest,  "Rhythm crest",  "SINE: the fitted rhythm turned down (crest)")
+alertcondition(trough, "Rhythm trough", "SINE: the fitted rhythm turned up (trough)")
+
+// ───────────────────────── Stats panel
+gradeOf(float s, float cyc) =>
+    float sc = cyc < 3 ? math.min(s, 0.549) : s
+    sc >= 0.75 ? "Very strong" : sc >= 0.55 ? "Strong" : sc >= 0.35 ? "Moderate" : sc >= 0.15 ? "Weak" : "No clear rhythm"
+
+if showTable and barstate.islast
+    color tc = color.white
+    table.cell(tbl, 0, 0, "SINE", text_color = colBand, text_size = size.small)
+    table.cell(tbl, 1, 0, "Cycle Bands", text_color = tc, text_size = size.small)
+    table.cell(tbl, 0, 1, "Main cycle", text_color = tc, text_size = size.small)
+    table.cell(tbl, 1, 1, na(mainP) ? "none found" : str.tostring(mainP, "#.#") + " bars (" + fmtPeriod(mainP) + ")", text_color = tc, text_size = size.small)
+    table.cell(tbl, 0, 2, "Rhythm strength", text_color = tc, text_size = size.small)
+    table.cell(tbl, 1, 2, na(strength) ? "—" : gradeOf(strength, nz(cycles)) + " (" + str.tostring(strength * 100, "#") + "%)", text_color = tc, text_size = size.small)
+    table.cell(tbl, 0, 3, "Rhythm now", text_color = tc, text_size = size.small)
+    table.cell(tbl, 1, 3, na(cycSlope) ? "—" : cycSlope > 0 ? "Rising" : "Falling", text_color = cycSlope > 0 ? colUp : colDn, text_size = size.small)
+    table.cell(tbl, 0, 4, "Next turn", text_color = tc, text_size = size.small)
+    table.cell(tbl, 1, 4, turnTxt, text_color = tc, text_size = size.small)
+    table.cell(tbl, 0, 5, "Trend", text_color = tc, text_size = size.small)
+    table.cell(tbl, 1, 5, na(trendB) ? "—" : str.tostring((math.exp(trendB * N) - 1) * 100, "+#.#;-#.#") + "% per window", text_color = tc, text_size = size.small)

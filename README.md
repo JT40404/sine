@@ -7,6 +7,7 @@ index.html            landing page
 learn.html            plain-English guide: what SINE measures, how to read it, the edge, the limits (shows live $SINE stats once the token trades)
 analyzer.html         live analyzer: contract lens, ecosystem pulse, or your own data
 config.js             ← official token address + social links
+indicator/            SINE Cycle Bands: chart indicator for TradingView (Pine) and Charting Library platforms (see indicator/README.md)
 assets/               styles, Fourier core, page scripts, favicon
 api/
   market.js           GET /api/market?address=<mint>&interval=1s…1d
