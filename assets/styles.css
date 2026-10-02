@@ -457,3 +457,52 @@ body.chart-waves .chart-spec-only, body.chart-spec .chart-waves-only { display: 
 .lp-foot { margin-top: 8px; }
 .lp code { font-family: var(--mono); font-size: 13px; }
 .lp section.lp-grid { padding: 0; border-top: 0; }   /* tab panels: no landing-page section padding */
+
+/* ---------- mobile site nav (all pages) ---------- */
+.mnav { display: none; }
+@media (max-width: 1080px) {
+  .mnav { display: flex; gap: 6px; overflow-x: auto; padding: 10px var(--pad); border-bottom: 1px solid var(--line); scrollbar-width: none; }
+  .mnav::-webkit-scrollbar { display: none; }
+  .mnav a { flex-shrink: 0; padding: 9px 16px; border-radius: 999px; font-size: 14px; color: var(--text-2); text-decoration: none; border: 1px solid transparent; min-height: 40px; display: inline-flex; align-items: center; }
+  .mnav a:hover { color: var(--text); }
+  .mnav a[aria-current=page] { color: var(--text); background: var(--surface); border-color: var(--line-strong); }
+  .app-header .nav-link, .lp-nav { display: none; }
+}
+
+/* ---------- launch ticker ---------- */
+.ticker { display: flex; align-items: center; gap: 14px; border-bottom: 1px solid var(--line); background: #0B0D10; overflow: hidden; }
+.ticker[hidden] { display: none; }
+.ticker-label { flex-shrink: 0; padding: 0 0 0 var(--pad); font-family: var(--mono); font-size: 11px; letter-spacing: 2px; color: var(--accent); }
+.ticker-viewport { flex: 1; overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent); }
+.ticker-track { display: flex; width: max-content; animation: tick var(--tick-dur, 40s) linear infinite; }
+.ticker:hover .ticker-track, .ticker:focus-within .ticker-track { animation-play-state: paused; }
+@keyframes tick { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .ticker-track { animation: none; } .ticker-viewport { overflow-x: auto; } }
+.tk-item { display: inline-flex; align-items: center; gap: 8px; padding: 11px 22px; font-family: var(--mono); font-size: 13px; color: var(--text-2); text-decoration: none; white-space: nowrap; border-right: 1px solid var(--line); }
+.tk-item:hover { color: var(--text); background: var(--surface); }
+.tk-item img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; background: var(--surface); }
+.tk-item strong { color: var(--text); font-weight: 500; }
+.tk-up { color: var(--accent); } .tk-down { color: #F07A6A; }
+
+/* ---------- launchpad live chart ---------- */
+.coin-chart { padding: 20px 24px; display: flex; flex-direction: column; gap: 12px; }
+.coin-chart[hidden] { display: none; }
+.cc-head { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.cc-title { display: flex; align-items: baseline; gap: 10px; }
+.cc-sym { font-family: var(--serif); font-size: 32px; }
+.cc-stats { display: flex; gap: 22px; margin-left: auto; flex-wrap: wrap; }
+.cc-stats span { display: flex; flex-direction: column; gap: 2px; }
+.cc-stats em { font-style: normal; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+.cc-stats strong { font-family: var(--mono); font-size: 16px; font-weight: 500; }
+.cc-wrap { position: relative; }
+#cc-svg { display: block; width: 100%; height: auto; }
+.cc-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 20px 12%; margin: 0; color: var(--muted); font-size: 15px; line-height: 1.6; background: rgba(15,17,20,0.75); }
+.cc-empty[hidden] { display: none; }
+.cc-legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.lg::before { content: ""; display: inline-block; width: 18px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 6px; }
+.lg-price::before { border-color: #ECE9E2; } .lg-fit::before { border-color: #9DB4FF; } .lg-proj::before { border-color: #7FE3B5; border-top-style: dashed; }
+.lg-buy::before { width: 9px; height: 9px; border: 0; border-radius: 50%; background: #F0A857; }
+.cc-sum { margin: 0; font-size: 14px; line-height: 1.6; color: var(--text-2); }
+@media (max-width: 700px) { .cc-stats { margin-left: 0; width: 100%; justify-content: space-between; } .cc-int { width: 100%; } .cc-int button { flex: 1; } }
+.lp h1 { overflow-wrap: normal; word-break: normal; hyphens: manual; }
+@media (max-width: 560px) { .lp h1 { font-size: 28px; } }

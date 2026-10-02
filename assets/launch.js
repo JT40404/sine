@@ -107,10 +107,12 @@
     var name = $("f-name").value.trim(), symbol = $("f-symbol").value.trim().toUpperCase();
     var devBuy = Math.max(0, Math.min(5, Number($("f-devbuy").value) || 0)), slip = Math.max(1, Math.min(50, Number($("f-slip").value) || 10));
     var mint = W3.Keypair.generate();               // the coin's address; its secret key never leaves this browser
+    var uploaded = null;
     busy = true; refreshLaunchButton(); resetSteps("steps"); $("launch-result").hidden = true; status("");
     step("steps", "upload", "active");
     post("/api/upload", { image: imageData, name: name, symbol: symbol, description: $("f-desc").value, twitter: $("f-twitter").value.trim(), telegram: $("f-telegram").value.trim(), website: $("f-website").value.trim() })
       .then(function (up) {
+        uploaded = up;
         step("steps", "upload", "done"); step("steps", "build", "active");
         return post("/api/pump", { action: "create", publicKey: owner.toBase58(), mint: mint.publicKey.toBase58(), tokenMetadata: { name: name, symbol: symbol, uri: up.uri }, amount: devBuy, slippage: slip, priorityFee: 0.0005 });
       })
@@ -136,6 +138,10 @@
         var b = el("button", "Set up buyback & burn for $" + symbol); b.className = "btn"; b.type = "button";
         b.addEventListener("click", function () { $("bb-mint").value = m; showTab("buyback"); loadCoin(m); }); res.appendChild(b);
         $("launch-form").reset(); imageData = null; $("pv-img").style.backgroundImage = ""; preview();
+        post("/api/registry", { sig: sig, mint: m, creator: owner.toBase58(), name: name, symbol: symbol, image: uploaded && uploaded.image })
+          .then(function () { loadTicker(); }).catch(function () {});
+        $("bb-mint").value = m; loadCoin(m, true);
+        $("coin-chart").scrollIntoView({ behavior: "smooth", block: "start" });
       })
       .catch(function (err) {
         document.querySelectorAll("#steps li[data-state=active]").forEach(function (li) { li.setAttribute("data-state", "failed"); });
@@ -182,6 +188,8 @@
       coin.decimals = (v.data && v.data.parsed && v.data.parsed.info && v.data.parsed.info.decimals) || 6;
       $("bb-coin").textContent = "Coin " + short(mint) + " · " + (v.owner === TOKEN_2022 ? "Token-2022" : "SPL token") + " · fees come from the connected wallet’s pump.fun creator rewards.";
     }).catch(function (e) { $("bb-coin").textContent = e.message; });
+    $("coin-chart").hidden = false; $("cc-sym").textContent = "$…"; $("cc-name").textContent = short(mint);
+    syncIntervalChips(); market = null; drawChart();
     refreshVault(); refreshBurned(); renderHistory(); recompute(); refreshSignal();
   }
 
@@ -215,7 +223,7 @@
   });
 
   /* Fourier timing */
-  var analysis = null, stress = null;
+  var analysis = null, stress = null, market = null;
   function refreshSignal() {
     if (!coin) return;
     $("bb-signal").textContent = "Analysing…"; $("bb-signal").setAttribute("data-action", "wait");
@@ -223,10 +231,12 @@
     fetch("/api/market?address=" + encodeURIComponent(coin.mint) + "&interval=" + $("s-interval").value)
       .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || "No market data"); return j; }); })
       .then(function (m) {
+        market = m;
         analysis = F.analyze(m.closes, m.intervalHours); stress = F.stressIndex(m.closes);
-        coin.symbol = m.token && m.token.symbol; recompute();
+        coin.symbol = m.token && m.token.symbol; recompute(); drawChart();
       })
-      .catch(function () { analysis = null; stress = null; recompute(); });
+      .catch(function () { market = null; analysis = null; stress = null; recompute(); drawChart(); });
+    refreshStats();
   }
   function recompute() {
     if (!coin) return;
@@ -356,6 +366,116 @@
       ul.appendChild(li);
     });
   }
+
+
+  /* ───────────── live chart (price · Fourier fit · projection · buybacks) ───────────── */
+  var CW = 1200, CH = 340, PADL = 12, PADR = 150, PADT = 16, PADB = 26;
+  function syncIntervalChips() {
+    document.querySelectorAll(".cc-int button").forEach(function (b) { b.setAttribute("aria-pressed", b.getAttribute("data-iv") === $("s-interval").value); });
+  }
+  document.querySelectorAll(".cc-int button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      $("s-interval").value = b.getAttribute("data-iv"); syncIntervalChips();
+      if (coin) store(key("settings"), settings()); refreshSignal();
+    });
+  });
+  function fmtUsd(v) {
+    if (v === null || v === undefined || !isFinite(v)) return "—";
+    if (v >= 1e9) return "$" + (v / 1e9).toFixed(2) + "B"; if (v >= 1e6) return "$" + (v / 1e6).toFixed(2) + "M";
+    if (v >= 1e3) return "$" + (v / 1e3).toFixed(1) + "k"; if (v >= 1) return "$" + v.toFixed(2);
+    return "$" + v.toPrecision(3);
+  }
+  function refreshStats() {
+    if (!coin) return;
+    fetch("/api/token?address=" + encodeURIComponent(coin.mint)).then(function (r) { return r.ok ? r.json() : null; }).then(function (t) {
+      if (!t) return;
+      var tk = t.token || t;
+      $("cc-sym").textContent = "$" + ((tk.symbol || coin.symbol || "").toUpperCase() || short(coin.mint));
+      $("cc-name").textContent = tk.name || "";
+      $("cc-price").textContent = fmtUsd(tk.priceUsd);
+      $("cc-mc").textContent = fmtUsd(tk.marketCapUsd || tk.fdvUsd);
+      var ch = tk.change24h; $("cc-chg").textContent = ch === null || ch === undefined ? "—" : (ch >= 0 ? "+" : "") + Number(ch).toFixed(1) + "%";
+      $("cc-chg").style.color = ch > 0 ? "var(--accent)" : ch < 0 ? "#F07A6A" : "";
+    }).catch(function () {});
+  }
+  function drawChart() {
+    var empty = !market || !analysis || !analysis.peaks.length;
+    $("cc-empty").hidden = !empty;
+    ["cc-price-line", "cc-fit", "cc-proj", "cc-band"].forEach(function (id) { $(id).setAttribute("d", ""); });
+    $("cc-buys").textContent = ""; $("cc-grid").textContent = "";
+    if (empty) { $("cc-dot").setAttribute("r", 0); $("cc-sum").textContent = ""; return; }
+    var closes = market.closes, N = closes.length, show = Math.min(N, 360), off = N - show, dt = market.intervalHours;
+    var y = closes.map(Math.log), p0 = analysis.peaks;
+    var fit = F.harmonicFit(y, p0.map(function (pk) { return dt / pk.period; }));
+    var proj = F.project(closes, dt, p0[0].period);
+    var H = proj ? proj.H : 0, total = show + H;
+    var lo = Infinity, hi = -Infinity;
+    for (var i = off; i < N; i++) { lo = Math.min(lo, y[i]); hi = Math.max(hi, y[i]); }
+    if (proj) for (var h = 0; h <= H; h++) { lo = Math.min(lo, proj.lo[h]); hi = Math.max(hi, proj.hi[h]); }
+    var pad = (hi - lo) * 0.08 || 0.01; lo -= pad; hi += pad;
+    var X = function (k) { return PADL + (CW - PADL - PADR) * k / Math.max(1, total - 1); };
+    var Y = function (v) { return PADT + (CH - PADT - PADB) * (1 - (v - lo) / (hi - lo)); };
+    var line = function (arr, start) { var d = ""; for (var k = 0; k < arr.length; k++) d += (k ? "L" : "M") + X(start + k).toFixed(1) + " " + Y(arr[k]).toFixed(1); return d; };
+    for (var g = 0; g <= 4; g++) {
+      var gv = lo + (hi - lo) * g / 4, gy = Y(gv);
+      var ln = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      ln.setAttribute("x1", PADL); ln.setAttribute("x2", CW - PADR + 10); ln.setAttribute("y1", gy); ln.setAttribute("y2", gy); ln.setAttribute("stroke", "#1D2127");
+      var tx = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      tx.setAttribute("x", CW - PADR + 16); tx.setAttribute("y", gy + 4); tx.setAttribute("fill", "#8A8F98"); tx.setAttribute("font-size", "12"); tx.setAttribute("font-family", "IBM Plex Mono, monospace");
+      tx.textContent = fmtUsd(Math.exp(gv)); $("cc-grid").appendChild(ln); $("cc-grid").appendChild(tx);
+    }
+    $("cc-price-line").setAttribute("d", line(y.slice(off), 0));
+    if (fit) { var fv = []; for (var n = off; n < N; n++) fv.push(fit(n)); $("cc-fit").setAttribute("d", line(fv, 0)); }
+    if (proj) {
+      $("cc-proj").setAttribute("d", line(proj.center, show - 1));
+      var top = "", bot = "";
+      for (var hh = 0; hh <= H; hh++) { top += (hh ? "L" : "M") + X(show - 1 + hh).toFixed(1) + " " + Y(proj.hi[hh]).toFixed(1); }
+      for (hh = H; hh >= 0; hh--) bot += "L" + X(show - 1 + hh).toFixed(1) + " " + Y(proj.lo[hh]).toFixed(1);
+      $("cc-band").setAttribute("d", top + bot + "Z");
+    }
+    var nx = X(show - 1); $("cc-now").setAttribute("x1", nx); $("cc-now").setAttribute("x2", nx); $("cc-now-t").setAttribute("x", nx);
+    $("cc-dot").setAttribute("r", 5); $("cc-dot").setAttribute("cx", nx); $("cc-dot").setAttribute("cy", Y(y[N - 1]));
+    // buyback markers from this browser's history
+    var ts = market.timestamps || [], t0 = ts[off] * 1000, t1 = ts[N - 1] * 1000;
+    (owner ? history() : []).forEach(function (b) {
+      if (!(b.at >= t0 && b.at <= t1 + dt * 3600e3)) return;
+      var k = Math.min(show - 1, Math.round((b.at - t0) / (dt * 3600e3)));
+      var c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      c.setAttribute("cx", X(k)); c.setAttribute("cy", Y(y[off + k])); c.setAttribute("r", 6); c.setAttribute("fill", "#F0A857");
+      var tt = document.createElementNS("http://www.w3.org/2000/svg", "title"); tt.textContent = "Buyback " + sol(b.sol) + " · " + new Date(b.at).toLocaleString(); c.appendChild(tt);
+      $("cc-buys").appendChild(c);
+    });
+    var d = lastDecision, lvl = d ? d.level : 0;
+    $("cc-sum").textContent = (lvl ? ["", "Weak", "Moderate", "Strong", "Very strong"][lvl] + " rhythm · every " : "No clear rhythm yet · strongest swing every ") + fmtH(p0[0].period) +
+      (d && d.phase ? " · " + Math.round(d.phase.frac * 100) + "% through its cycle, " + (d.phase.rising ? "rising" : "falling") : "") +
+      (proj && proj.skill !== undefined && isFinite(proj.skill) ? " · projection skill " + proj.skill.toFixed(2) : "") +
+      " · buyback signal: " + ({ buy: "BUY BACK NOW", dca: "fallback due", wait: "wait" }[d ? d.action : "wait"]);
+    $("cc-svg").setAttribute("aria-label", "Price chart for " + $("cc-sym").textContent + ". " + $("cc-sum").textContent);
+  }
+  setInterval(function () { if (coin && !busy && document.visibilityState === "visible") refreshSignal(); }, 30000);
+
+  /* ───────────── launch ticker ───────────── */
+  function loadTicker() {
+    var pin = (window.SINE_CONFIG || {}).tokenAddress || "";
+    fetch("/api/registry" + (MINT_RE.test(pin) ? "?pin=" + encodeURIComponent(pin) : "")).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      var list = (j && j.tokens) || [], tr = $("ticker-track");
+      if (!list.length) { $("ticker").hidden = true; return; }
+      tr.textContent = "";
+      var reps = list.length < 6 ? Math.ceil(6 / list.length) : 1;              // fill the strip, then duplicate for a seamless loop
+      for (var copy = 0; copy < 2; copy++) for (var r2 = 0; r2 < reps; r2++) list.forEach(function (t) {
+        var a = document.createElement("a"); a.className = "tk-item"; a.href = "/launch?mint=" + encodeURIComponent(t.mint);
+        if (copy) a.setAttribute("aria-hidden", "true"), a.tabIndex = -1;
+        if (t.image) { var im = document.createElement("img"); im.src = t.image; im.alt = ""; im.loading = "lazy"; a.appendChild(im); }
+        a.appendChild(el("strong", "$" + (t.symbol || short(t.mint))));
+        a.appendChild(el("span", "MC " + fmtUsd(t.marketCapUsd)));
+        if (t.change24h !== null && t.change24h !== undefined) { var c = el("span", (t.change24h >= 0 ? "▲ " : "▼ ") + Math.abs(t.change24h).toFixed(1) + "%"); c.className = t.change24h >= 0 ? "tk-up" : "tk-down"; a.appendChild(c); }
+        tr.appendChild(a);
+      });
+      tr.style.setProperty("--tick-dur", Math.max(25, list.length * reps * 6) + "s");
+      $("ticker").hidden = false;
+    }).catch(function () {});
+  }
+  loadTicker(); setInterval(loadTicker, 60000);
 
   /* ───────────── start ───────────── */
   var params = new URLSearchParams(location.search);

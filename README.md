@@ -102,6 +102,17 @@ People connect their own Solana wallet (Phantom, Solflare or Backpack) and can:
    - **Auto mode** checks the timing every minute while the page is open and prompts the wallet to approve when it's time.
    - **"Burned so far"** is read from the chain: 1B starting supply minus current supply.
 
+**Live chart.** Once a coin is loaded (after launching it, from the Buyback tab, from a ticker link, or via `/launch?mint=<address>`), the page shows a live chart:
+- price, the Fourier rhythm fit, the "if the pattern holds" projection band, and buyback markers
+- price, market cap and 24h change
+- a one-line summary of the rhythm and the buyback signal
+- refreshes every 30 seconds
+
+**Launch ticker.** A scrolling strip of coins launched through SINE, with market cap and 24h change, pinned with your main token from `config.js`.
+- **Recording:** each launch is recorded only after `/api/registry` verifies it on-chain. The transaction must have succeeded, been signed by both the new coin and the creator, and gone through the pump.fun program.
+- **Storage:** needs Upstash Redis. In Vercel, go to Storage → Marketplace → Upstash Redis and connect it to the project; it adds `KV_REST_API_URL` and `KV_REST_API_TOKEN` automatically. Redeploy afterwards.
+- **Without storage,** the ticker shows only your main token.
+
 **Security model: non-custodial.** The site never sees a private key.
 - The coin's key is generated and used only in the browser.
 - Every transaction is approved in the user's wallet.
