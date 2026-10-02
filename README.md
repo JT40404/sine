@@ -84,6 +84,44 @@ The wording thresholds live in `summarize()` in `assets/analyzer.js`.
 
 **`/learn`** walks through the idea, every number, every chart, six ways the information can sharpen a read of the market, and what SINE can't do.
 
+## Launchpad (`/launch`): pump.fun launches with Fourier-timed buyback & burn
+
+People connect their own Solana wallet (Phantom, Solflare or Backpack) and can:
+
+1. **Launch a coin on pump.fun.**
+   - The image and details are stored on IPFS (Pinata).
+   - PumpPortal's Local Transaction API builds the create transaction.
+   - The browser signs it with a freshly generated coin key plus the user's wallet.
+2. **Buy back and burn with creator fees**, on the Buyback & burn tab:
+   - **Claim** the wallet's pump.fun creator fees into a per-coin buyback budget. pump.fun pays out fees for all of a creator's coins in one claim.
+   - **Fourier timing** (`assets/buyback.js`) decides when to buy:
+     - **BUY:** a real rhythm (Weak or better, p ≤ 0.3 against random walks), with price in the cycle's trough and turning up, and no high downward stress.
+     - **FALLBACK:** buy anyway if no good trough comes within the max wait (24 h by default), so fees never sit idle.
+     - **WAIT:** otherwise.
+   - **Each round** buys with a tranche of the budget (50% by default), then burns exactly the tokens that arrived. It uses `BurnChecked`, and the token program (SPL or Token-2022) is detected from the coin itself.
+   - **Auto mode** checks the timing every minute while the page is open and prompts the wallet to approve when it's time.
+   - **"Burned so far"** is read from the chain: 1B starting supply minus current supply.
+
+**Security model: non-custodial.** The site never sees a private key.
+- The coin's key is generated and used only in the browser.
+- Every transaction is approved in the user's wallet.
+- The server routes are narrow pass-throughs:
+  - `/api/pump` builds `create`, `buy` and `collectCreatorFee` transactions via PumpPortal.
+  - `/api/upload` pins to IPFS with your Pinata key.
+  - `/api/rpc` relays an allowlist of Solana RPC methods through your RPC provider.
+- Fully hands-off buybacks would need a server holding the creator's key, which this site deliberately does not do. Use SINE-BOT locally with your own wallet for that.
+
+**Setup:** add these in Vercel → Settings → Environment Variables, then redeploy:
+- `PINATA_JWT`: a free Pinata account → API Keys → JWT. pump.fun's own upload endpoint is retired, so launches need it.
+- `RPC_URL`: a paid Solana RPC such as Helius or QuickNode. The URL can contain its key, since it stays server-side. The public RPC is heavily rate-limited.
+
+**Before going public:**
+- Read pump.fun's and PumpPortal's terms (pumpportal.fun/legal).
+- Get a legal review of running a launchpad and of how buybacks are described.
+- Do a small real launch and buyback yourself first.
+
+Fees on each launch and trade are shown in the user's wallet before approval: pump.fun's creation fee, network fees, and PumpPortal's trading fee on buys.
+
 ## Statistical method (v2): random-walk-aware Fourier analysis
 
 Informed by Öztürk (2025), *Exploring market efficiency in cryptocurrencies: Fourier analysis of non-linear dynamics and breaks*, Istanbul Business Research 54(3), 374–389 ([doi:10.26650/ibr.2025.54.1666799](https://doi.org/10.26650/ibr.2025.54.1666799)). The study tests 25 major coins against the random-walk (weak-form efficiency) null. It finds that tests allowing for **smooth structural breaks** and **non-linear mean reversion** reject the random walk for most coins, where linear tests don't.
