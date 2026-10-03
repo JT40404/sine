@@ -13,7 +13,8 @@ import {
 import { CpAmm, derivePositionAddress, derivePositionNftAccount, getTokenProgram } from '@meteora-ag/cp-amm-sdk';
 import { json, readJson, isAddress } from './_lib/http.js';
 import { gecko } from './_lib/gecko.js';
-import { normalizeForm, buildConfig, summarize, taxCurve, platformPolicy, PRESETS, DEFAULT_FORM, SOL_MINT, FormError } from './_lib/forge.js';
+import { normalizeForm, buildConfig, summarize, taxCurve, platformPolicy, PRESETS, DEFAULT_FORM, SOL_MINT, FormError,
+  hookConfigureIx, hookSwapAccounts, hookConfigAddress, decodeHookRules, MAX_HOOK_ALLOWLIST } from './_lib/forge.js';
 
 /**
  * /api/forge — SINE Forge, the everything-launchpad (Meteora Dynamic Bonding Curve + DAMM v2).
@@ -87,21 +88,37 @@ async function marketInfo(mint) {
   } catch { return { symbol: null, name: null, image: null, priceUsd: null }; }
 }
 
-/** Builds both launch transactions. Exported for the offline self-test. */
-export async function buildLaunchTxs(conn, { cfg, policy, creator, config, baseMint, quoteMint, name, symbol, uri, devBuy, minOut, priorityMicroLamports }) {
+/** Builds the launch transactions (plus the hook-rules transaction for hooked coins). Exported for the offline self-test. */
+export async function buildLaunchTxs(conn, { cfg, norm, policy, creator, config, baseMint, quoteMint, name, symbol, uri, devBuy, minOut, priorityMicroLamports }) {
   const client = new DynamicBondingCurveClient(conn, 'confirmed');
   const partner = policy.partnerWallet ? pk(policy.partnerWallet) : creator;
-  const { createConfigTx, createPoolWithFirstBuyTx } = await client.partner.createConfigAndPoolWithFirstBuy({
-    ...cfg, config, feeClaimer: partner, leftoverReceiver: creator, quoteMint, payer: creator,
-    preCreatePoolParam: { name, symbol, uri, poolCreator: creator, baseMint },
-    firstBuyParam: devBuy && devBuy.gtn(0) ? { buyer: creator, receiver: creator, buyAmount: devBuy, minimumAmountOut: minOut || new BN(1), referralTokenAccount: null } : undefined,
-  });
+  const hooked = Boolean(norm && norm.hooks && norm.hooks.enabled);
+  const firstBuy = devBuy && devBuy.gtn(0)
+    ? { buyer: creator, receiver: creator, buyAmount: devBuy, minimumAmountOut: minOut || new BN(1), referralTokenAccount: null, ...(hooked ? hookSwapAccounts(baseMint, policy.hookProgram) : {}) }
+    : undefined;
+  const base = { ...cfg, config, feeClaimer: partner, leftoverReceiver: creator, quoteMint, payer: creator,
+    preCreatePoolParam: { name, symbol, uri, poolCreator: creator, baseMint }, firstBuyParam: firstBuy };
+  const { createConfigTx, createPoolWithFirstBuyTx } = hooked
+    ? await client.partner.createConfigAndPoolWithFirstBuyWithTransferHook({ ...base, transferHookProgram: pk(policy.hookProgram) })
+    : await client.partner.createConfigAndPoolWithFirstBuy(base);
   const { blockhash } = await conn.getLatestBlockhash('confirmed');
-  return {
+  const out = {
     configTx: await finalize(conn, createConfigTx, creator, { priorityMicroLamports, blockhash }),
     poolTx: await finalize(conn, createPoolWithFirstBuyTx, creator, { priorityMicroLamports, blockhash }),
     pool: deriveDbcPoolAddress(quoteMint, baseMint, config).toBase58(),
   };
+  // Rules go on-chain FIRST (signed by the mint key), so the coin can never trade without them.
+  if (hooked) out.hookTx = await finalize(conn, new Transaction().add(hookConfigureIx(norm, creator, baseMint, policy.hookProgram)), creator, { priorityMicroLamports, blockhash });
+  return out;
+}
+
+/** The transfer-hook program named by a Token-2022 mint (null when none or revoked at graduation). */
+async function mintHook(conn, mint) {
+  const acc = await conn.getParsedAccountInfo(pk(mint), 'confirmed');
+  const ext = acc && acc.value && acc.value.data && acc.value.data.parsed && acc.value.data.parsed.info && acc.value.data.parsed.info.extensions;
+  const th = (ext || []).find((e) => e.extension === 'transferHook');
+  const prog = th && th.state && th.state.programId;
+  return prog && prog !== PublicKey.default.toBase58() ? prog : null;
 }
 
 /** Finds the DBC pool (by pool address or by coin mint) with its config. */
@@ -168,6 +185,16 @@ async function poolView(conn, client, address, vp, config) {
       devBuySkipsTax: config.enableFirstSwapWithMinFee === 1,
     },
   };
+  try {
+    const hook = await mintHook(conn, vp.baseMint);
+    const policy = platformPolicy();
+    const program = hook || policy.hookProgram;
+    if (program && vp.poolType === 1) {
+      const acc = await conn.getAccountInfo(hookConfigAddress(vp.baseMint, program), 'confirmed');
+      const rules = acc ? decodeHookRules(acc.data) : null;
+      if (rules) out.hooks = { program, active: Boolean(hook), ...rules };
+    }
+  } catch { /* rules are display-only */ }
   if (out.migrated) {
     try {
       const d = await loadDamm(conn, vp, config);
@@ -202,7 +229,7 @@ async function actionCreate(conn, b, policy) {
   const cfg = buildConfig(norm, policy);
   const devBuy = b.devBuy ? bn(b.devBuy, 'dev buy') : new BN(0);
   const txs = await buildLaunchTxs(conn, {
-    cfg, policy, creator: pk(b.creator), config: pk(b.config), baseMint: pk(b.baseMint), quoteMint: pk(qMint),
+    cfg, norm, policy, creator: pk(b.creator), config: pk(b.config), baseMint: pk(b.baseMint), quoteMint: pk(qMint),
     name, symbol, uri: b.uri, devBuy, minOut: new BN(1), priorityMicroLamports: priority(b.priority),
   });
   return { ...txs, summary: summarize(norm, cfg, policy) };
@@ -217,10 +244,13 @@ async function actionCreatePool(conn, client, b) {
   const cfg = await client.state.getPoolConfig(config);
   need(cfg, 'That config does not exist on-chain yet.');
   const devBuy = b.devBuy ? bn(b.devBuy, 'dev buy') : new BN(0);
-  const tx = await client.creator.createPoolWithFirstBuy({
-    createPoolParam: { name, symbol, uri: b.uri, payer: creator, poolCreator: creator, config, baseMint },
-    firstBuyParam: devBuy.gtn(0) ? { buyer: creator, receiver: creator, buyAmount: devBuy, minimumAmountOut: new BN(1), referralTokenAccount: null } : undefined,
-  });
+  const hookCfg = await client.pool.program.account.configWithTransferHook.fetchNullable(config).catch(() => null);
+  const hookProgram = hookCfg && hookCfg.transferHookProgram ? hookCfg.transferHookProgram.toBase58() : null;
+  const createPoolParam = { name, symbol, uri: b.uri, payer: creator, poolCreator: creator, config, baseMint };
+  const firstBuyParam = devBuy.gtn(0) ? { buyer: creator, receiver: creator, buyAmount: devBuy, minimumAmountOut: new BN(1), referralTokenAccount: null, ...(hookProgram ? hookSwapAccounts(baseMint, hookProgram) : {}) } : undefined;
+  const tx = hookProgram
+    ? await client.creator.createPoolWithFirstBuyWithTransferHook({ createPoolParam: { ...createPoolParam, transferHookProgram: pk(hookProgram) }, firstBuyParam })
+    : await client.creator.createPoolWithFirstBuy({ createPoolParam, firstBuyParam });
   return { tx: await finalize(conn, tx, creator, { priorityMicroLamports: priority(b.priority) }), pool: deriveDbcPoolAddress(cfg.quoteMint, baseMint, config).toBase58() };
 }
 
@@ -253,7 +283,10 @@ async function actionSwap(conn, client, b) {
     const q = { out: quote.outputAmount.toString(), minOut: quote.minimumAmountOut.toString(), fee: quote.tradingFee.toString(),
       feeInQuote: config.collectFeeMode === 0 || side === 'sell' };
     if (quoteOnly) return { venue: 'curve', quote: q };
-    const tx = await client.pool.swap({ owner, pool: address, amountIn, minimumAmountOut: quote.minimumAmountOut, swapBaseForQuote: side === 'sell', referralTokenAccount: null, payer: owner });
+    const hook = await mintHook(conn, vp.baseMint);
+    const tx = hook
+      ? await client.pool.swap2WithTransferHook({ owner, pool: address, amountIn, minimumAmountOut: quote.minimumAmountOut, swapBaseForQuote: side === 'sell', swapMode: 0, referralTokenAccount: null, payer: owner })
+      : await client.pool.swap({ owner, pool: address, amountIn, minimumAmountOut: quote.minimumAmountOut, swapBaseForQuote: side === 'sell', referralTokenAccount: null, payer: owner });
     return { venue: 'curve', tx: await finalize(conn, tx, owner, { priorityMicroLamports: priority(b.priority) }), quote: q };
   }
   const d = await loadDamm(conn, vp, config);
@@ -281,11 +314,15 @@ async function actionFees(conn, client, b) {
   switch (b.action) {
     case 'claim':
       need(vp.creator.equals(owner), 'Only the coin’s creator wallet can claim creator fees.');
-      tx = await client.creator.claimCreatorTradingFee({ creator: owner, payer: owner, pool: address, maxBaseAmount: vp.creatorBaseFee, maxQuoteAmount: vp.creatorQuoteFee });
+      tx = vp.creatorBaseFee.gtn(0) && await mintHook(conn, vp.baseMint)
+        ? await client.creator.claimCreatorTradingFee2({ creator: owner, payer: owner, pool: address, maxBaseAmount: vp.creatorBaseFee, maxQuoteAmount: vp.creatorQuoteFee, receiver: owner })
+        : await client.creator.claimCreatorTradingFee({ creator: owner, payer: owner, pool: address, maxBaseAmount: vp.creatorBaseFee, maxQuoteAmount: vp.creatorQuoteFee });
       break;
     case 'partnerClaim':
       need(config.feeClaimer.equals(owner), 'Only the platform fee wallet can claim platform fees.');
-      tx = await client.partner.claimPartnerTradingFee({ feeClaimer: owner, payer: owner, pool: address, maxBaseAmount: vp.partnerBaseFee, maxQuoteAmount: vp.partnerQuoteFee });
+      tx = vp.partnerBaseFee.gtn(0) && await mintHook(conn, vp.baseMint)
+        ? await client.partner.claimPartnerTradingFee2({ feeClaimer: owner, payer: owner, pool: address, maxBaseAmount: vp.partnerBaseFee, maxQuoteAmount: vp.partnerQuoteFee, receiver: owner })
+        : await client.partner.claimPartnerTradingFee({ feeClaimer: owner, payer: owner, pool: address, maxBaseAmount: vp.partnerBaseFee, maxQuoteAmount: vp.partnerQuoteFee });
       break;
     case 'surplus':
       need(vp.isMigrated === 1, 'Surplus can be withdrawn only after graduation.');
@@ -432,7 +469,7 @@ export default async function handler(req, res) {
       const action = String(req.query.action || 'setup');
       if (action === 'setup') {
         res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
-        return res.status(200).json({ presets: PRESETS, defaults: DEFAULT_FORM, policy: { platformFeeSharePct: policy.platformFeeSharePct, maxCreatorFeeSharePct: policy.maxCreatorFeeSharePct, poolCreationFeeSol: policy.poolCreationFeeSol, partnerWallet: policy.partnerWallet }, program: DYNAMIC_BONDING_CURVE_PROGRAM_ID.toBase58() });
+        return res.status(200).json({ presets: PRESETS, defaults: DEFAULT_FORM, policy: { platformFeeSharePct: policy.platformFeeSharePct, maxCreatorFeeSharePct: policy.maxCreatorFeeSharePct, poolCreationFeeSol: policy.poolCreationFeeSol, partnerWallet: policy.partnerWallet, hookProgram: policy.hookProgram, maxHookAllowlist: MAX_HOOK_ALLOWLIST }, program: DYNAMIC_BONDING_CURVE_PROGRAM_ID.toBase58() });
       }
       if (action === 'quote') {
         const mint = String(req.query.mint || '');

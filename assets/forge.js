@@ -18,6 +18,7 @@
     $("fe-share").max = max; if (Number($("fe-share").value) > max) $("fe-share").value = max;
     $("fe-share-max").textContent = s.policy.platformFeeSharePct ? "(up to " + max + "%; the platform keeps " + s.policy.platformFeeSharePct + "%)" : "(of the 80% that isn’t Meteora’s)";
     $("lp-partner").hidden = !s.policy.partnerWallet;
+    $("hk-off").hidden = Boolean(s.policy.hookProgram); $("hk-on").disabled = !s.policy.hookProgram; $("hk-max").textContent = s.policy.maxHookAllowlist || 20;
     if (!s.policy.partnerWallet) $("fe-share").closest(".lp-field").hidden = true;   // self-hosted: the creator gets every non-Meteora fee
     if (!s.policy.partnerWallet) { $("g-mfee-c-wrap").hidden = true; }
     var box = $("presets");
@@ -44,7 +45,15 @@
     $("lp-cl").value = m.grad.lp.creatorLockedPct; $("lp-cu").value = m.grad.lp.creatorPct; $("lp-pl").value = m.grad.lp.partnerLockedPct; $("lp-pu").value = m.grad.lp.partnerPct;
     $("g-mfee").value = m.grad.migrationFeePct || 0; $("g-mfee-c").value = m.grad.migrationFeeCreatorPct === undefined ? 100 : m.grad.migrationFeeCreatorPct;
     $("v-on").checked = m.vesting.enabled; $("v-pct").value = m.vesting.pct; $("v-cliff").value = m.vesting.cliffDays; $("v-dur").value = m.vesting.durationDays; $("v-cliffpct").value = m.vesting.cliffUnlockPct;
+    var h = m.hooks || {};
+    $("hk-on").checked = Boolean(h.enabled) && !$("hk-on").disabled;
+    if (h.enabled) {
+      $("hk-phase").value = h.launchPhaseMin || 60; $("hk-wallet").value = h.maxWalletPct || 0; $("hk-tx").value = h.maxTxPct || 0; $("hk-slot").value = h.maxBuysPerSlot || 0;
+      $("hk-lock").value = h.creatorLockDays || 0; $("hk-daily").value = h.creatorDailyPct || 0; $("hk-p2p").checked = Boolean(h.noP2p);
+      if ($("hk-on").disabled) F.status("This preset needs on-chain rules, which aren’t switched on for this site yet. The other settings were loaded.", true);
+    }
     syncShare(); toggles(); refresh();
+    if (h.enabled && $("hk-on").disabled) return;
     F.status("Loaded “" + setup.presets[k].label + "”. Every setting below can still be changed.", true);
   }
   function merge(a, b) { var o = JSON.parse(JSON.stringify(a)); Object.keys(b || {}).forEach(function (k) { o[k] = b[k] && typeof b[k] === "object" && !Array.isArray(b[k]) && o[k] ? merge(o[k], b[k]) : b[k]; }); return o; }
@@ -125,6 +134,9 @@
         lp: { creatorLockedPct: num("lp-cl"), creatorPct: num("lp-cu"), partnerLockedPct: num("lp-pl"), partnerPct: num("lp-pu") },
         migrationFeePct: num("g-mfee"), migrationFeeCreatorPct: num("g-mfee-c"),
       },
+      hooks: { enabled: $("hk-on").checked, launchPhaseMin: num("hk-phase"), maxWalletPct: num("hk-wallet"), maxTxPct: num("hk-tx"), maxBuysPerSlot: num("hk-slot"),
+        noP2p: $("hk-p2p").checked, creatorLockDays: num("hk-lock"), creatorDailyPct: num("hk-daily"), allowlistMin: num("hk-allowmin"),
+        allowlist: $("hk-allow").value.split(/[\s,]+/).filter(function (a) { return F.MINT_RE.test(a); }) },
       vesting: { enabled: $("v-on").checked, pct: num("v-pct"), cliffDays: num("v-cliff"), durationDays: num("v-dur"), periods: Math.max(1, Math.round(num("v-dur"))), cliffUnlockPct: num("v-cliffpct") },
     };
   }
@@ -135,6 +147,8 @@
     $("g-comp-wrap").hidden = $("g-mode").value !== "compound";
     $("c-mig-wrap").hidden = $("c-shape").value !== "twoSegment";
     $("v-box").hidden = !$("v-on").checked;
+    $("hk-box").hidden = !$("hk-on").checked;
+    $("t-type").disabled = $("hk-on").checked; if ($("hk-on").checked) $("t-type").value = "token2022";
     $("g-mfee-c-wrap").hidden = !(setup && setup.policy.partnerWallet) || !(num("g-mfee") > 0);
     var lp = ["lp-cl", "lp-cu", "lp-pl", "lp-pu"].reduce(function (s, id) { return s + (num(id) || 0); }, 0);
     $("lp-sum").textContent = lp + "%" + (lp !== 100 ? " (must total 100%)" : "");
@@ -183,12 +197,24 @@
     row("Trading fee", s.snipe ? F.pct(s.snipe.startPct) + " → " + F.pct(s.tradeFeePct) + " over " + s.snipe.seconds + " s" : F.pct(s.tradeFeePct));
     row("After graduation", "Meteora DAMM v2 · " + F.pct(s.graduation.feePct) + " fee" + (s.graduation.feeMode === "compound" ? " · auto-compounding" : ""));
     if (s.poolCreationFeeSol) row("Platform launch fee", s.poolCreationFeeSol + " SOL");
+    if (s.hooks) {
+      var hr = [];
+      if (s.hooks.maxWalletPct) hr.push("holder cap " + F.pct(s.hooks.maxWalletPct));
+      if (s.hooks.maxTxPct) hr.push("max tx " + F.pct(s.hooks.maxTxPct));
+      if (s.hooks.maxBuysPerSlot) hr.push(s.hooks.maxBuysPerSlot + " buys/block");
+      if (s.hooks.noP2p) hr.push("no P2P sends");
+      if (s.hooks.allowlistMin) hr.push("allowlist " + s.hooks.allowlistMin + " min");
+      row("On-chain rules (" + s.hooks.launchPhaseMin + " min)", hr.join(", ") || "creator rules only");
+      if (s.hooks.creatorLockDays || s.hooks.creatorDailyPct) row("Creator", (s.hooks.creatorLockDays ? "locked " + s.hooks.creatorLockDays + " d" : "") + (s.hooks.creatorLockDays && s.hooks.creatorDailyPct ? ", then " : "") + (s.hooks.creatorDailyPct ? "≤ " + F.pct(s.hooks.creatorDailyPct) + "/day" : ""));
+    }
     if (s.devBuy) { row("Your dev buy gets", F.fmt(s.devBuy.tokens) + " tokens (" + F.pct(s.devBuy.pctOfSupply) + ")"); $("db-out").textContent = "≈ " + F.fmt(s.devBuy.tokens) + " tokens, " + F.pct(s.devBuy.pctOfSupply) + " of supply" + ($("fe-devmin").checked ? ", at the minimum fee." : "."); }
     var badge = function (t, good) { badges.appendChild(el("span", { class: "fg-badge" + (good ? " good" : " warn"), text: t })); };
     badge(s.graduation.lockedLpPct + "% LP locked forever", s.graduation.lockedLpPct >= 50);
     badge(s.authority === "immutable" ? "Immutable metadata, no mint authority" : s.authority === "creatorMint" ? "Creator can mint more" : "Creator can edit metadata", s.authority === "immutable");
     if (s.snipe) badge("Anti-sniper tax " + F.pct(s.snipe.startPct), true);
     if (s.vestedPct) badge("Team tokens vested", true);
+    if (s.hooks) badge("Transfer-hook rules", true);
+    if (s.hooks && (s.hooks.creatorLockDays || s.hooks.creatorDailyPct)) badge("Creator sells limited on-chain", true);
     badge("Pair: " + sym, true);
     var seg = function (label, pct, cls) { if (pct > 0) split.appendChild(el("span", { class: "fg-seg-" + cls, style: "flex:" + pct, title: label + " " + pct + "%" }, [el("em", { text: label + " " + F.pct(pct, 0) })])); };
     seg("You", s.feeSplitPct.creator, "you"); seg("Platform", s.feeSplitPct.platform, "plat"); seg("Meteora", s.feeSplitPct.meteora, "met");
@@ -300,11 +326,13 @@
       step("build", "done"); step("sign", "active");
       var txs = [F.decode(r.configTx), F.decode(r.poolTx)];
       txs[0].partialSign(configKp); txs[1].partialSign(mintKp);
+      if (r.hookTx) { var ht = F.decode(r.hookTx); ht.partialSign(mintKp); txs.push(ht); $("step-hook").hidden = false; }
       var meta = { name: name, symbol: symbol, uri: uploaded.uri, image: uploaded.image, pool: r.pool, mint: mintKp.publicKey.toBase58(), quoteMint: form.quote.mint, devBuy: devBuyRaw(), config: configKp.publicKey.toBase58() };
       return (F.wallet.signAllTransactions ? F.wallet.signAllTransactions(txs) : Promise.all(txs.map(function (t) { return F.wallet.signTransaction(t); }))).then(function (signed) { return { signed: signed, meta: meta }; });
     }).then(function (x) {
-      step("sign", "done"); step("config", "active");
-      return F.send(x.signed[0]).then(function (sig) { return F.confirm(sig, "Config"); }).then(function () {
+      step("sign", "done");
+      var hookFirst = x.signed[2] ? (step("hook", "active"), F.send(x.signed[2]).then(function (sig) { return F.confirm(sig, "Transfer rules"); }).then(function () { step("hook", "done"); })) : Promise.resolve();
+      return hookFirst.then(function () { step("config", "active"); return F.send(x.signed[0]); }).then(function (sig) { return F.confirm(sig, "Config"); }).then(function () {
         step("config", "done"); step("pool", "active");
         pending = { meta: x.meta, mintKp: mintKp };                   // if the next step fails, the pool can be retried
         return F.send(x.signed[1]).then(function (sig) { return F.confirm(sig, "Coin creation"); });

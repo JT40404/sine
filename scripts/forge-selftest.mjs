@@ -18,7 +18,8 @@ conn.getLatestBlockhash = async () => ({ blockhash: '111111111111111111111111111
 
 let n = 0;
 const ok = (name) => { n++; console.log('  ✓', name); };
-const policies = [platformPolicy({}), platformPolicy({ FORGE_PARTNER_WALLET: Keypair.generate().publicKey.toBase58(), FORGE_PLATFORM_FEE_SHARE: '20', FORGE_POOL_CREATION_FEE_SOL: '0.05' })];
+const HOOK = Keypair.generate().publicKey.toBase58();              // stands in for the deployed sine-hooks program
+const policies = [platformPolicy({ FORGE_HOOK_PROGRAM: HOOK }), platformPolicy({ FORGE_PARTNER_WALLET: Keypair.generate().publicKey.toBase58(), FORGE_PLATFORM_FEE_SHARE: '20', FORGE_POOL_CREATION_FEE_SOL: '0.05', FORGE_HOOK_PROGRAM: HOOK })];
 
 for (const policy of policies) {
   console.log(policy.partnerWallet ? 'With platform wallet' : 'Self-hosted (no platform wallet)');
@@ -31,13 +32,48 @@ for (const policy of policies) {
     assert.ok(sum.graduatesAtQuoteRaised > 0);
     assert.ok(sum.feeSplitPct.creator + sum.feeSplitPct.platform + sum.feeSplitPct.meteora === 100);
     const creator = Keypair.generate().publicKey, config = Keypair.generate().publicKey, baseMint = Keypair.generate().publicKey;
-    const txs = await buildLaunchTxs(conn, { cfg, policy, creator, config, baseMint, quoteMint: new PublicKey(mint), name: 'Test Coin', symbol: 'TEST', uri: 'https://ipfs.io/ipfs/bafkreigh2akiscaildcqabsyg3dfr6chu3fgpregiymsck7e7aqa4s52zy', devBuy: new BN(10).pow(new BN(quotes[mint] - 1)), minOut: new BN(1), priorityMicroLamports: 50_000 });
-    for (const t of [txs.configTx, txs.poolTx]) {
+    const txs = await buildLaunchTxs(conn, { cfg, norm, policy, creator, config, baseMint, quoteMint: new PublicKey(mint), name: 'Test Coin', symbol: 'TEST', uri: 'https://ipfs.io/ipfs/bafkreigh2akiscaildcqabsyg3dfr6chu3fgpregiymsck7e7aqa4s52zy', devBuy: new BN(10).pow(new BN(quotes[mint] - 1)), minOut: new BN(1), priorityMicroLamports: 50_000 });
+    if (norm.hooks.enabled) {
+      assert.ok(txs.hookTx, `${key}: hooked launch must include the rules transaction`);
+      const { Transaction: T } = await import('@solana/web3.js');
+      const pool = T.from(Buffer.from(txs.poolTx, 'base64'));
+      assert.ok(pool.instructions.some((ix) => ix.keys.some((k) => k.pubkey.toBase58() === HOOK)), `${key}: dev buy must pass the hook accounts`);
+      const hookIx = T.from(Buffer.from(txs.hookTx, 'base64')).instructions.find((ix) => ix.programId.toBase58() === HOOK);
+      assert.equal(Buffer.from(hookIx.data.subarray(0, 8)).toString(), 'SINECFG1');
+      assert.equal(hookIx.keys[1].pubkey.toBase58(), baseMint.toBase58());
+      assert.ok(hookIx.keys[1].isSigner, 'the mint key must sign the rules');
+    }
+    for (const t of [txs.configTx, txs.poolTx, txs.hookTx].filter(Boolean)) {
       const size = Buffer.from(t, 'base64').length;
       assert.ok(size <= 1232, `${key}: transaction too large (${size} bytes)`);
     }
-    ok(`${p.label} → valid config, ${Buffer.from(txs.configTx, 'base64').length}+${Buffer.from(txs.poolTx, 'base64').length} bytes`);
+    ok(`${p.label} → valid config, ${[txs.hookTx, txs.configTx, txs.poolTx].filter(Boolean).map((t) => Buffer.from(t, 'base64').length).join('+')} bytes`);
   }
+}
+
+// Hooked launch with the largest allowlist still fits in one transaction, and the rule bytes decode back
+{
+  const policy = policies[0];
+  const { decodeHookRules, hookConfigAddress } = await import('../api/_lib/forge.js');
+  const allow = Array.from({ length: 20 }, () => Keypair.generate().publicKey.toBase58());
+  const norm = normalizeForm({ hooks: { enabled: true, launchPhaseMin: 120, maxWalletPct: 1.5, maxTxPct: 0.5, maxBuysPerSlot: 3, noP2p: true, allowlist: allow, allowlistMin: 5, creatorLockDays: 30, creatorDailyPct: 1 } }, { mint: SOL_MINT, decimals: 9 }, policy);
+  const creator = Keypair.generate().publicKey, baseMint = Keypair.generate().publicKey;
+  const txs = await buildLaunchTxs(conn, { cfg: buildConfig(norm, policy), norm, policy, creator, config: Keypair.generate().publicKey, baseMint, quoteMint: new PublicKey(SOL_MINT), name: 'Hooked', symbol: 'HOOK', uri: 'https://ipfs.io/ipfs/x', devBuy: new BN(1e9), minOut: new BN(1), priorityMicroLamports: 50_000 });
+  const size = Buffer.from(txs.hookTx, 'base64').length;
+  assert.ok(size <= 1232, `hook tx ${size} bytes`);
+  // Simulate the account the program writes, using the same field order as rules.rs
+  const { Transaction: T } = await import('@solana/web3.js');
+  const ix = T.from(Buffer.from(txs.hookTx, 'base64')).instructions.find((i) => i.programId.toBase58() === HOOK);
+  const d = ix.data, acct = Buffer.alloc(2 + 32 + 8 * 3 + 2 + 2 + 1 + 1 + 8 + 8 + 2 + 8 + 8 + 8 + 1 + 1 + 128 + 1 + 2048);
+  let o = 0; acct[o++] = 1; acct[o++] = 255; creator.toBuffer().copy(acct, o); o += 32;
+  d.copy(acct, o, 8, 16); o += 8; acct.writeBigInt64LE(1000n, o); o += 8; acct.writeBigInt64LE(1000n + BigInt(d.readUInt32LE(16)), o); o += 8;
+  d.copy(acct, o, 20, 26); o += 6; acct.writeBigInt64LE(BigInt(1000 + d.readUInt32LE(26)), o); o += 8; acct.writeBigInt64LE(BigInt(1000 + d.readUInt32LE(30)), o); o += 8; d.copy(acct, o, 34, 36); o += 2;
+  o += 25; acct[o++] = 2;
+  const r = decodeHookRules(acct);
+  assert.equal(r.maxWalletBps, 150); assert.equal(r.maxTxBps, 50); assert.equal(r.maxBuysPerSlot, 3); assert.equal(r.noP2p, true); assert.equal(r.creatorDailyBps, 100);
+  assert.equal(r.launchPhaseEndTs - r.createdTs, 7200); assert.equal(r.creatorLockUntilTs - 1000, 30 * 86400);
+  assert.ok(hookConfigAddress(baseMint, HOOK));
+  ok(`hooked launch with a 20-wallet allowlist: rules tx ${size} bytes, rule bytes decode correctly`);
 }
 
 // Anti-sniper tax decays monotonically from start to the trading fee
@@ -64,6 +100,11 @@ for (const policy of policies) {
   assert.equal(clamped.fees.tradeBps, 25);
   assert.equal(clamped.fees.creatorSharePct, 80);           // platform keeps its 20% share
   assert.equal(clamped.fees.snipe.startBps, 9900);
+  assert.throws(() => normalizeForm({ hooks: { enabled: true, maxWalletPct: 1 } }, q, platformPolicy({})), /FORGE_HOOK_PROGRAM/);
+  assert.throws(() => normalizeForm({ hooks: { enabled: true } }, q, policy), /at least one/);
+  assert.throws(() => normalizeForm({ token: { authority: 'creatorMint' } }, q, policy), /transfer-hook/);
+  const big = normalizeForm({ hooks: { enabled: true, noP2p: true, allowlist: Array.from({ length: 40 }, () => Keypair.generate().publicKey.toBase58()), allowlistMin: 10 } }, q, policy);
+  assert.equal(big.hooks.allowlist.length, 20); assert.equal(big.token.tokenType, 'token2022');
   ok('rejects impossible settings, clamps out-of-range ones, enforces the platform share');
 }
 

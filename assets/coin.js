@@ -94,7 +94,26 @@
     if (r.vested) badge("Team tokens vested", true);
     if (r.devBuySkipsTax) badge("Dev buy at minimum fee", true);
     var row = function (k, v) { dl.appendChild(el("div", null, [el("dt", { text: k }), el("dd", { text: v })])); };
-    var lp = 80;
+    var lp = 80, H = P.hooks;
+    if (H) {
+      var now = chainNow(), live = H.active && now < H.launchPhaseEndTs, pctOf = function (bps) { return F.pct(bps / 100); };
+      badge(H.active ? (live ? "On-chain rules active" : "Launch-phase rules ended") : "Transfer hook off (graduated)", true);
+      var parts = [];
+      if (H.maxWalletBps) parts.push("holder cap " + pctOf(H.maxWalletBps));
+      if (H.maxTxBps) parts.push("max " + pctOf(H.maxTxBps) + " per transfer");
+      if (H.maxBuysPerSlot) parts.push(H.maxBuysPerSlot + " buys per block");
+      if (H.noP2p) parts.push("no wallet-to-wallet sends");
+      if (H.allowlistUntilTs) parts.push("allowlist (" + H.allowlistCount + " wallets) until " + new Date(H.allowlistUntilTs * 1000).toLocaleTimeString());
+      row("Transfer-hook rules", (parts.join(" · ") || "creator rules only") + (H.active ? (live ? " · until " + new Date(H.launchPhaseEndTs * 1000).toLocaleString() : " · ended") : ""));
+      if (H.creatorLockUntilTs || H.creatorDailyBps) {
+        var c = [];
+        if (H.creatorLockUntilTs) c.push(now < H.creatorLockUntilTs ? "can’t sell or send until " + new Date(H.creatorLockUntilTs * 1000).toLocaleDateString() : "lock ended");
+        if (H.creatorDailyBps) c.push("max " + pctOf(H.creatorDailyBps) + " of supply per day");
+        row("Creator wallet", c.join(" · "));
+        if (H.active) badge("Creator sells limited on-chain", true);
+      }
+      row("Hook program", F.short(H.program));
+    }
     row("Fee split", P.partner === P.creator ? "creator 80% · Meteora 20%" : "creator " + F.pct(lp * r.creatorFeeSharePct / 100, 0) + " · platform " + F.pct(lp * (100 - r.creatorFeeSharePct) / 100, 0) + " · Meteora 20%");
     row("Fees collected in", r.collectFeeMode === "quote" ? qsym() + " only" : "both tokens");
     row("After graduation", F.pct(r.graduatedFeeBps / 100) + " fee · " + ({ quote: "paid in " + qsym(), both: "paid in both tokens", compound: "auto-compounding" }[r.graduatedFeeMode]));
