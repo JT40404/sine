@@ -5,7 +5,7 @@
  * address here, the site shows "Address announced at launch" instead of a placeholder.
  */
 window.SINE_CONFIG = {
-  tokenAddress: "",
+  tokenAddress: "FpJ7hmZ9MaybefHLhwpKutgERQaqwV5xW8p6iwm3pump",
   tokenSymbol: "$SINE",
 
   links: {
