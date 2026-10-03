@@ -1,11 +1,15 @@
 # SINE website + market-data API
 
-This is the SINE website together with its backend. The backend is a set of Vercel serverless functions that fetch real Solana market data from GeckoTerminal / CoinGecko. The Fourier analysis runs in the visitor's browser. There's no build step and no npm dependencies.
+This is the SINE website together with its backend. The backend is a set of Vercel serverless functions that fetch real Solana market data from GeckoTerminal / CoinGecko, plus **SINE Forge**, a launchpad built on Meteora's bonding-curve programs. The Fourier analysis runs in the visitor's browser. There's no build step; Vercel installs the few npm dependencies (Solana and Meteora SDKs) automatically.
 
 ```
 index.html            landing page
 learn.html            plain-English guide: what SINE measures, how to read it, the edge, the limits (shows live $SINE stats once the token trades)
 analyzer.html         live analyzer: contract lens, ecosystem pulse, or your own data
+forge.html            SINE Forge: create wizard (any pair, fees, anti-sniper tax, vesting, LP locks)
+coin.html             Forge coin page: trade, live launch tax, graduation, creator studio / fee router
+explore.html          every coin launched through SINE
+launch.html           the original pump.fun launchpad
 config.js             ← official token address + social links
 assets/               styles, Fourier core, page scripts, favicon
 api/
@@ -14,6 +18,8 @@ api/
   open.js             GET /api/open?id=<coingecko id>   (token → contract lens redirect)
   ecosystem.js        GET /api/ecosystem?interval=1m…1d (Core 6 on-chain basket)
   token.js            GET /api/token?address=<mint>
+  forge.js            SINE Forge transaction builder (all Forge actions, one function)
+  _lib/forge.js       launch form → Meteora DBC config (presets, limits, platform policy)
   health.js           GET /api/health
   _lib/gecko.js       data-provider client, windows, caching
   _lib/basket.js      ← Top 20 rules (size, filters, weight cap) + Core 6 tokens
@@ -83,6 +89,66 @@ The wording thresholds live in `summarize()` in `assets/analyzer.js`.
 **Term explanations.** Every **?** button opens a plain-language definition. They are defined in `GLOSSARY` in the same file.
 
 **`/learn`** walks through the idea, every number, every chart, six ways the information can sharpen a read of the market, and what SINE can't do.
+
+## SINE Forge (`/forge`, `/coin`, `/explore`): the everything-launchpad
+
+Forge pulls together the features of the other launchpads (pump.fun, letsbonk, Believe, Bags, Jupiter Studio, Heaven, Moonshot) in one place. It runs on **Meteora's Dynamic Bonding Curve (DBC)** and **DAMM v2**, the audited programs that power several of those launchpads. **Each coin gets its own on-chain config**, so every launch picks its own settings.
+
+| Feature | How it works |
+|---|---|
+| **Pair with any token** | SOL, USDC or any SPL mint, such as STONK, OTC or your own coin. Buyers pay in that token, the curve is priced in it, and graduation pairs the coin with it. Mints with a freeze authority, or Token-2022 mints with extensions, are refused because they need a Meteora token badge. Add one-click suggestions in `config.js` → `forgePairs`. |
+| **Anti-sniper launch tax** | A fee scheduler starts at up to 99% and decays to the normal fee, linear or exponential, over the time and number of steps you choose. Example: 99% → 1% over 60 s, dropping every second. Bots that buy in the first block pay the tax, and it goes to the fee claimers. The coin page shows a live countdown. |
+| **Anti-bot volatility fee** | Optional dynamic fee that rises during violent price swings, both on the curve and after graduation. |
+| **Fair dev buy** | The dev buy is in the same transaction as coin creation, so nobody can buy first. Optionally it pays only the minimum fee instead of the sniper tax. |
+| **Modifiable fee schemes** | Trading fee 0.25–10%. Creator/platform split of the 80% that isn't Meteora's. Fees collected in the pair token or in both tokens. Separate fee after graduation (0.1–10%), paid out or **auto-compounded into liquidity**. Optional graduation fee (% of raised liquidity) with its own creator share. |
+| **Curve** | Starting and graduation market cap, entered in USD or the pair token. Standard or two-segment shape, supply 1M–1T, 6–9 decimals, SPL or Token-2022. |
+| **Locked liquidity** | At graduation the LP is split between creator and platform, each part permanently locked or unlocked. At least 10% must be locked. Locked LP keeps earning fees. |
+| **Team vesting** | Optional team allocation locked on-chain: cliff after graduation, linear unlock, optional cliff unlock. |
+| **Safety** | Metadata immutable by default with no mint authority. Every option is shown as a badge on the coin page, read from the chain. |
+| **Vanity address** | Grind a coin address ending in up to 4 chosen characters, in browser Web Workers. |
+| **Buyback & burn** | Coin page → Creator studio → fee router: claim fees → buy the coin → burn exactly what was bought. |
+| **Add liquidity** | After graduation: the router buys half and adds both sides to the DAMM v2 pool, optionally **permanently locked**. Also available as a manual tool. |
+| **Holder airdrops & fee sharing** | The router pays part of the fees pro-rata to the top 20 real holders (pool and locker accounts excluded) and/or to weighted fee-share wallets (Bags-style), batched 6 per transaction. |
+| **Published fee plan** | The creator's planned split is stored in the coin's IPFS metadata (`extensions.sineForgeFeePlan`) and shown on the coin page. |
+| **Auto router** | While the coin page is open, it checks every N minutes and runs the plan when unclaimed fees pass a threshold. The wallet approves each step. |
+| **Trading** | Buy and sell on the curve, then on DAMM v2 after graduation, with quotes, slippage and balances. |
+| **Graduation** | Meteora's migrator moves full curves automatically. Anyone can also push it from the coin page. |
+| **Creator tools** | Claim creator fees, claim LP fees, withdraw surplus, withdraw graduation fee, transfer creator rights, burn. |
+| **Platform revenue** | Optional, for the site owner: a share of trading fees, a launch fee and LP share. The platform wallet gets a "Claim platform fees" panel on each coin page. |
+| **Explore** | New, about-to-graduate, graduated and top-market-cap lists, filtered by pair, with search and a progress bar on each coin. |
+| **Presets** | Classic (pump.fun style), Sniper shield, Meme-pair, Stable-pair, Creator revenue, Fair & vested. |
+
+**Non-custodial.** `/api/forge` only builds unsigned transactions. The coin's mint key and its config key are generated in the browser. The user's wallet signs and pays: one prompt for the two launch transactions. The server creates only throwaway LP-position NFT keys, which control nothing until the user's wallet signs.
+
+**Fee flow (enforced by the program):** trading fee → 20% Meteora protocol, 80% split between creator and platform. With no platform wallet set, the creator is the fee claimer and receives the whole 80%.
+
+**Setup (Vercel → Settings → Environment Variables, then redeploy):**
+- `RPC_URL`: **required in practice.** Use a paid RPC such as Helius. Pool lookups by coin use `getProgramAccounts`, which public RPCs block.
+- `PINATA_JWT`: image and metadata uploads, the same as for `/launch`.
+- Upstash Redis (`KV_REST_API_*`): the Explore list and the ticker.
+- Optional platform revenue:
+  - `FORGE_PARTNER_WALLET`: your fee wallet
+  - `FORGE_PLATFORM_FEE_SHARE`: % of the 80% the platform keeps (default 20)
+  - `FORGE_POOL_CREATION_FEE_SOL`: launch fee, 0 or 0.001–100
+
+**Test:**
+- `npm test` runs an offline self-test:
+  - every preset builds a config the Meteora SDK accepts, with and without a platform wallet
+  - the launch transactions fit Solana's size limit
+  - the sniper tax decays from 99% to 1%
+  - bad inputs are rejected
+  - the burn and payout builders work
+- `node scripts/dev.mjs` serves the site and API locally. Add `--mock-chain` to click through the UI without a Solana connection.
+
+**What it can't do (be upfront with users):**
+- The fee router and auto router run from the creator's wallet while the page is open. The published plan is a public commitment, but the program doesn't enforce it. Holders can verify it from the on-chain history.
+- Anti-bot protection is fee-based: launch tax and volatility fee. DBC has no max-wallet or per-transaction buy cap.
+- Meteora's protocol fee (20% of trading fees) and its minimum fee (0.25%) apply.
+
+**Before going public:**
+- Do a small real launch on mainnet with your own wallet, then a trade, a claim, a buyback & burn, and a graduation.
+- Read Meteora's terms.
+- Get a legal review of running a launchpad and of how fees, buybacks and airdrops are described.
 
 ## Launchpad (`/launch`): pump.fun launches with Fourier-timed buyback & burn
 
@@ -305,9 +371,13 @@ After changing any environment variable in Vercel, **redeploy**. Existing deploy
 ## Run locally
 
 ```bash
-npm i -g vercel
-vercel dev          # serves the pages and runs /api/* locally
+npm install
+node scripts/dev.mjs                # pages + /api/* on http://localhost:3000 (reads .env)
+node scripts/dev.mjs --mock-chain   # same, with Solana reads stubbed for UI work
+npm test                            # Forge offline self-test
 ```
+
+`vercel dev` also works.
 
 Put your key in a `.env` file first if you have one. `.env` is gitignored.
 

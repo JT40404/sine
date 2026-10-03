@@ -463,7 +463,7 @@
       tr.textContent = "";
       var reps = list.length < 6 ? Math.ceil(6 / list.length) : 1;              // fill the strip, then duplicate for a seamless loop
       for (var copy = 0; copy < 2; copy++) for (var r2 = 0; r2 < reps; r2++) list.forEach(function (t) {
-        var a = document.createElement("a"); a.className = "tk-item"; a.href = "/launch?mint=" + encodeURIComponent(t.mint);
+        var a = document.createElement("a"); a.className = "tk-item"; a.href = (t.engine === "forge" ? "/coin?mint=" : "/launch?mint=") + encodeURIComponent(t.mint);
         if (copy) a.setAttribute("aria-hidden", "true"), a.tabIndex = -1;
         if (t.image) { var im = document.createElement("img"); im.src = t.image; im.alt = ""; im.loading = "lazy"; a.appendChild(im); }
         a.appendChild(el("strong", "$" + (t.symbol || short(t.mint))));

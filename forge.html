@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SINE Forge — launch a coin with every launchpad feature</title>
+<meta name="description" content="Launch a Solana meme coin paired with any token, with an anti-sniper launch tax, custom fee splits, creator fees, buyback & burn, locked liquidity, team vesting and automatic graduation to a Meteora pool.">
+<meta name="theme-color" content="#0F1114">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+<div class="wrap">
+<header class="app-header">
+  <a class="brand" href="/" aria-label="SINE home"><img src="/assets/sine-icon.svg" width="32" height="32" alt=""><span>SINE</span></a>
+  <nav class="lp-nav" aria-label="Sections"><a class="nav-link" href="/explore">Explore</a><a class="nav-link" href="/forge" aria-current="page">Create</a><a class="nav-link" href="/launch">pump.fun launch</a><a class="nav-link" href="/analyzer">Analyzer</a></nav>
+  <div class="wallet-box"><span class="chip" id="wallet-chip">Not connected</span><button class="btn" type="button" id="connect">Connect wallet</button></div>
+</header>
+<nav class="mnav" aria-label="Site"><a href="/">Home</a><a href="/explore">Explore</a><a href="/forge" aria-current="page">Create</a><a href="/launch">pump.fun</a><a href="/analyzer">Analyzer</a><a href="/learn">Learn</a></nav>
+
+<main class="app-main lp fg">
+  <div class="report-head">
+    <div>
+      <div class="meta">SINE FORGE · EVERY LAUNCHPAD FEATURE IN ONE</div>
+      <h1>Forge a coin. Pair it with anything. Tax the snipers.</h1>
+    </div>
+  </div>
+  <p class="lp-lead">Pair your coin with SOL, USDC or <strong>any Solana token</strong>. Then set your own fee scheme, a launch tax that starts high and decays to stop snipers and bots, creator revenue, team vesting and locked liquidity. Graduation to a Meteora pool is automatic. After launch, route creator fees into buyback &amp; burn, added liquidity, or payouts to holders and partners. <strong>Your wallet signs everything. SINE never holds your keys or funds.</strong></p>
+
+  <div class="fg-presets" id="presets" role="group" aria-label="Start from a preset"></div>
+  <div class="notice" id="status" role="status" hidden></div>
+
+  <form class="fg-grid" id="forge-form" novalidate>
+    <div class="fg-main">
+
+      <!-- 1 · Coin -->
+      <fieldset class="panel fg-card">
+        <legend><span class="fg-n">1</span> Coin</legend>
+        <div class="lp-row">
+          <label class="lp-field"><span>Name</span><input class="field" id="f-name" maxlength="32" placeholder="Sine Wave" required></label>
+          <label class="lp-field"><span>Ticker</span><input class="field" id="f-symbol" maxlength="10" placeholder="SINE" required></label>
+        </div>
+        <label class="lp-field"><span>Image <em>(PNG, JPG, GIF or WebP, up to 1 MB)</em></span><input class="field" id="f-image" type="file" accept="image/png,image/jpeg,image/gif,image/webp"></label>
+        <label class="lp-field"><span>Description</span><textarea class="field" id="f-desc" maxlength="500" placeholder="What’s the story?"></textarea></label>
+        <div class="lp-row fg-row3">
+          <label class="lp-field"><span>Website</span><input class="field" id="f-website" placeholder="https://"></label>
+          <label class="lp-field"><span>X / Twitter</span><input class="field" id="f-twitter" placeholder="https://x.com/…"></label>
+          <label class="lp-field"><span>Telegram</span><input class="field" id="f-telegram" placeholder="https://t.me/…"></label>
+        </div>
+        <details class="fg-adv">
+          <summary>Token standard, supply, authority &amp; vanity address</summary>
+          <div class="lp-row">
+            <label class="lp-field"><span>Total supply</span><input class="field" id="t-supply" type="number" min="1000000" max="1000000000000" step="1" value="1000000000"></label>
+            <label class="lp-field"><span>Decimals</span><select class="field" id="t-decimals"><option>6</option><option>7</option><option>8</option><option>9</option></select></label>
+          </div>
+          <div class="lp-row">
+            <label class="lp-field"><span>Token standard</span><select class="field" id="t-type"><option value="spl">SPL token (widest support)</option><option value="token2022">Token-2022</option></select></label>
+            <label class="lp-field"><span>Metadata &amp; mint authority</span><select class="field" id="t-auth"><option value="immutable">Immutable: nobody can change it (safest)</option><option value="creator">Creator can update metadata</option><option value="creatorMint">Creator can update metadata AND mint more (flagged as risky)</option></select></label>
+          </div>
+          <div class="lp-row">
+            <label class="lp-field"><span>Vanity address ending <em>(optional, 1–4 characters, e.g. “sine”)</em></span><input class="field" id="v-suffix" maxlength="4" placeholder="none" pattern="[1-9A-HJ-NP-Za-km-z]*"></label>
+            <label class="lp-check fg-vcase"><input type="checkbox" id="v-case" checked> Ignore upper/lower case (much faster)</label>
+          </div>
+          <p class="how" id="v-status">The coin’s address is generated in your browser. A vanity ending is found by trying random keys on all your CPU cores. Each extra character takes about 58× longer (about 34× if case is ignored).</p>
+        </details>
+      </fieldset>
+
+      <!-- 2 · Pair -->
+      <fieldset class="panel fg-card">
+        <legend><span class="fg-n">2</span> Pair it with</legend>
+        <div class="segmented fg-seg" role="group" aria-label="Quote asset" id="q-seg">
+          <button type="button" data-q="sol" aria-pressed="true">SOL</button><button type="button" data-q="usdc" aria-pressed="false">USDC</button><button type="button" data-q="custom" aria-pressed="false">Any token</button>
+        </div>
+        <div id="q-custom" hidden>
+          <label class="lp-field"><span>Pair token mint address <em>(STONK, OTC, BONK, your own coin… any SPL token)</em></span><input class="field" id="q-mint" placeholder="Paste the token’s contract address" spellcheck="false" autocomplete="off"></label>
+          <div class="fg-pairs" id="q-suggest"></div>
+        </div>
+        <div class="fg-qinfo" id="q-info"><span class="muted">Paired with SOL.</span></div>
+        <p class="how">Buyers pay in the pair token and creator fees are earned in it. Pairing with another meme coin ties your coin to that community: buying yours means buying theirs first.</p>
+      </fieldset>
+
+      <!-- 3 · Curve -->
+      <fieldset class="panel fg-card">
+        <legend><span class="fg-n">3</span> Bonding curve</legend>
+        <div class="segmented fg-seg" role="group" aria-label="Enter market caps in" id="unit-seg">
+          <button type="button" data-u="usd" aria-pressed="true">in USD</button><button type="button" data-u="quote" aria-pressed="false" id="unit-quote">in SOL</button>
+        </div>
+        <div class="lp-row">
+          <label class="lp-field"><span>Starting market cap</span><input class="field" id="c-start" type="number" min="0" step="any" value="5000"></label>
+          <label class="lp-field"><span>Graduation market cap</span><input class="field" id="c-grad" type="number" min="0" step="any" value="69000"></label>
+        </div>
+        <p class="how" id="c-conv"></p>
+        <div class="lp-row">
+          <label class="lp-field"><span>Curve shape</span><select class="field" id="c-shape"><option value="standard">Standard: one smooth curve (pump.fun-like)</option><option value="twoSegment">Two-segment: steeper late curve</option></select></label>
+          <label class="lp-field" id="c-mig-wrap" hidden><span>Supply that goes into the graduation pool (%)</span><input class="field" id="c-mig" type="number" min="5" max="50" step="1" value="20"></label>
+        </div>
+      </fieldset>
+
+      <!-- 4 · Fees & anti-bot -->
+      <fieldset class="panel fg-card">
+        <legend><span class="fg-n">4</span> Fees, anti-sniper &amp; anti-bot</legend>
+        <div class="lp-row">
+          <label class="lp-field"><span>Trading fee after the launch tax (%)</span><input class="field" id="fe-trade" type="number" min="0.25" max="10" step="0.05" value="1"></label>
+          <label class="lp-field"><span>Your share of trading fees <em id="fe-share-max"></em></span><input class="fg-range" id="fe-share" type="range" min="0" max="100" step="5" value="50"><output id="fe-share-out" class="mono">50%</output></label>
+        </div>
+        <label class="lp-check"><input type="checkbox" id="sn-on" checked> <span><strong>Anti-sniper launch tax:</strong> a very high fee at second zero that tapers down to the normal fee. Bots that buy in the first block pay up to 99%, and that money goes to fee claimers, not to the snipers.</span></label>
+        <div id="sn-box">
+          <div class="lp-row fg-row3">
+            <label class="lp-field"><span>Starting tax (%)</span><input class="field" id="sn-start" type="number" min="1" max="99" step="1" value="99"></label>
+            <label class="lp-field"><span>Tapers off over (seconds)</span><input class="field" id="sn-dur" type="number" min="5" max="86400" step="1" value="60"></label>
+            <label class="lp-field"><span>Decay</span><select class="field" id="sn-mode"><option value="exponential">Exponential: drops fast, then eases</option><option value="linear">Linear: steady decline</option></select></label>
+          </div>
+          <label class="lp-field"><span>Steps <em>(how often the tax drops; 60 steps over 60 s = every second)</em></span><input class="field" id="sn-steps" type="number" min="1" max="10000" step="1" value="60"></label>
+          <svg class="fg-tax" id="sn-svg" viewBox="0 0 600 140" role="img" aria-label="Launch tax over time"><path id="sn-area" fill="rgba(240,168,87,.15)"/><path id="sn-line" fill="none" stroke="#F0A857" stroke-width="2.5"/><text id="sn-t0" x="6" y="18" fill="#F0A857" font-size="13" font-family="IBM Plex Mono, monospace"></text><text id="sn-t1" x="594" y="130" fill="#A3A7AE" font-size="12" text-anchor="end" font-family="IBM Plex Mono, monospace"></text></svg>
+        </div>
+        <label class="lp-check"><input type="checkbox" id="fe-dyn" checked> <span><strong>Volatility fee:</strong> adds an extra fee during violent price swings, so bots pay more for pump-and-dump trading.</span></label>
+        <label class="lp-check"><input type="checkbox" id="fe-devmin" checked> <span><strong>My dev buy skips the launch tax:</strong> your buy in the launch transaction pays only the minimum fee. It happens atomically with creation, so nobody can buy before you.</span></label>
+        <label class="lp-field"><span>Collect fees in</span><select class="field" id="fe-collect"><option value="quote">The pair token only (easy to spend on buybacks)</option><option value="both">Whatever token is sold (coin on buys, pair on sells)</option></select></label>
+      </fieldset>
+
+      <!-- 5 · Graduation -->
+      <fieldset class="panel fg-card">
+        <legend><span class="fg-n">5</span> Graduation &amp; liquidity</legend>
+        <p class="how">When the curve fills, the coin graduates automatically to a Meteora DAMM v2 pool, seeded with the raised pair tokens plus the reserved supply.</p>
+        <div class="lp-row">
+          <label class="lp-field"><span>Pool fee after graduation (%)</span><input class="field" id="g-fee" type="number" min="0.1" max="10" step="0.05" value="1"></label>
+          <label class="lp-field"><span>What pool fees do</span><select class="field" id="g-mode"><option value="quote">Pay LP holders in the pair token</option><option value="both">Pay LP holders in both tokens</option><option value="compound">Auto-compound: part of every fee is added to liquidity</option></select></label>
+        </div>
+        <label class="lp-field" id="g-comp-wrap" hidden><span>Share of each fee that is added to liquidity (%)</span><input class="field" id="g-comp" type="number" min="1" max="100" step="1" value="50"></label>
+        <label class="lp-check"><input type="checkbox" id="g-dyn" checked> <span>Volatility fee in the graduated pool too</span></label>
+        <div class="fg-lp">
+          <div class="fg-lp-head"><strong>Who gets the graduation liquidity (LP)</strong><span class="muted" id="lp-sum">100%</span></div>
+          <div class="lp-row">
+            <label class="lp-field"><span>Creator: locked forever (%)</span><input class="field lp-in" id="lp-cl" type="number" min="0" max="100" step="1" value="100"></label>
+            <label class="lp-field"><span>Creator: unlocked (%)</span><input class="field lp-in" id="lp-cu" type="number" min="0" max="100" step="1" value="0"></label>
+          </div>
+          <div class="lp-row" id="lp-partner" hidden>
+            <label class="lp-field"><span>Platform: locked forever (%)</span><input class="field lp-in" id="lp-pl" type="number" min="0" max="100" step="1" value="0"></label>
+            <label class="lp-field"><span>Platform: unlocked (%)</span><input class="field lp-in" id="lp-pu" type="number" min="0" max="100" step="1" value="0"></label>
+          </div>
+          <p class="how">Locked LP can never be withdrawn, so it can’t be rugged, but it still earns trading fees for its owner. At least 10% must be locked.</p>
+        </div>
+        <div class="lp-row">
+          <label class="lp-field"><span>Graduation fee: % of the raised pair tokens taken at graduation</span><input class="field" id="g-mfee" type="number" min="0" max="50" step="1" value="0"></label>
+          <label class="lp-field" id="g-mfee-c-wrap" hidden><span>Creator’s share of that fee (%)</span><input class="field" id="g-mfee-c" type="number" min="0" max="100" step="5" value="100"></label>
+        </div>
+      </fieldset>
+
+      <!-- 6 · Vesting -->
+      <fieldset class="panel fg-card">
+        <legend><span class="fg-n">6</span> Team allocation &amp; vesting</legend>
+        <label class="lp-check"><input type="checkbox" id="v-on"> <span>Reserve part of the supply for the team, locked on-chain and released on a schedule that starts at graduation</span></label>
+        <div id="v-box" hidden>
+          <div class="lp-row">
+            <label class="lp-field"><span>Team allocation (% of supply)</span><input class="field" id="v-pct" type="number" min="0.1" max="50" step="0.1" value="10"></label>
+            <label class="lp-field"><span>Cliff (days after graduation)</span><input class="field" id="v-cliff" type="number" min="0" max="730" step="1" value="30"></label>
+          </div>
+          <div class="lp-row">
+            <label class="lp-field"><span>Then unlock linearly over (days)</span><input class="field" id="v-dur" type="number" min="0" max="730" step="1" value="180"></label>
+            <label class="lp-field"><span>Unlocked at the cliff (% of allocation)</span><input class="field" id="v-cliffpct" type="number" min="0" max="100" step="1" value="0"></label>
+          </div>
+        </div>
+      </fieldset>
+
+      <!-- 7 · After launch: fee router -->
+      <fieldset class="panel fg-card">
+        <legend><span class="fg-n">7</span> Creator-fee plan <span class="muted fg-legend-sub">(published with your coin)</span></legend>
+        <p class="how">Choose what your claimed creator fees should do. The plan is stored with the coin’s public metadata on IPFS, so holders can see it. You run it from the coin page, where every action is a public on-chain transaction.</p>
+        <div class="lp-row fg-row4">
+          <label class="lp-field"><span>Buy back &amp; burn (%)</span><input class="field rt-in" id="rt-burn" type="number" min="0" max="100" step="5" value="50"></label>
+          <label class="lp-field"><span>Add to liquidity (%)</span><input class="field rt-in" id="rt-lp" type="number" min="0" max="100" step="5" value="0"></label>
+          <label class="lp-field"><span>Airdrop to top holders (%)</span><input class="field rt-in" id="rt-hold" type="number" min="0" max="100" step="5" value="0"></label>
+          <label class="lp-field"><span>Fee-share wallets (%)</span><input class="field rt-in" id="rt-split" type="number" min="0" max="100" step="5" value="0"></label>
+        </div>
+        <div id="rt-wallets" class="fg-wallets"></div>
+        <button class="linklike" type="button" id="rt-add">+ Add a fee-share wallet</button>
+        <p class="how" id="rt-keep">You keep 50%.</p>
+      </fieldset>
+
+      <!-- 8 · Dev buy & launch -->
+      <fieldset class="panel fg-card">
+        <legend><span class="fg-n">8</span> Dev buy &amp; launch</legend>
+        <label class="lp-field"><span>Dev buy, in <span id="db-unit">SOL</span> <em>(optional; bought in the same transaction that creates the coin)</em></span><input class="field" id="db-amt" type="number" min="0" step="any" value="0"></label>
+        <p class="how" id="db-out"></p>
+        <label class="lp-check"><input type="checkbox" id="f-terms"> <span>I understand that coins can lose all their value, that launch and trading fees are shown in my wallet before I approve, and that I’m responsible for complying with the laws where I live.</span></label>
+        <button class="btn lp-go" type="submit" id="launch-btn" disabled>Connect a wallet to launch</button>
+        <ol class="lp-steps" id="steps">
+          <li data-step="key">Generate the coin’s address</li>
+          <li data-step="upload">Store image &amp; details on IPFS</li>
+          <li data-step="build">Build the launch transactions</li>
+          <li data-step="sign">Approve in your wallet (one prompt, two transactions)</li>
+          <li data-step="config">Create the coin’s fee &amp; curve config</li>
+          <li data-step="pool">Create the coin and dev buy</li>
+        </ol>
+      </fieldset>
+    </div>
+
+    <!-- live summary -->
+    <aside class="fg-side">
+      <div class="panel fg-sum" id="sum">
+        <div class="lp-preview fg-pv"><div class="lp-preview-img" id="pv-img"></div><div><strong id="pv-name">Your coin</strong> <span class="muted" id="pv-sym">$TICKER</span><p class="muted" id="pv-pair">paired with SOL</p></div></div>
+        <dl class="lp-dl" id="sum-dl"></dl>
+        <div class="fg-badges" id="sum-badges"></div>
+        <div class="fg-split" id="sum-split" aria-label="Who gets each trading fee"></div>
+        <p class="how" id="sum-note">Live preview, calculated with the same code the on-chain program uses.</p>
+      </div>
+    </aside>
+  </form>
+
+  <p class="how lp-foot">SINE Forge runs on <a href="https://docs.meteora.ag/" target="_blank" rel="noopener">Meteora’s</a> audited Dynamic Bonding Curve and DAMM v2 programs. Meteora takes 20% of trading fees as its protocol fee. Every transaction is public and signed by your wallet. Nothing here is financial advice. Coins can lose all their value.</p>
+</main>
+</div>
+<script src="/config.js"></script>
+<script src="/assets/site.js"></script>
+<script src="/assets/vendor/solana-web3-1.99.0.min.js"></script>
+<script src="/assets/forge-common.js"></script>
+<script src="/assets/forge.js"></script>
+</body>
+</html>
