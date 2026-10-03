@@ -10,10 +10,11 @@
  *                └─ 80%  split creator / platform by creatorTradingFeePercentage
  */
 import BN from 'bn.js';
+import { PublicKey, TransactionInstruction, SystemProgram } from '@solana/web3.js';
 import {
   buildCurveWithMarketCap, buildCurveWithTwoSegments, validateConfigParameters,
   BaseFeeMode, CollectFeeMode, MigrationOption, MigrationFeeOption, MigratedCollectFeeMode,
-  DammV2DynamicFeeMode, TokenType, TokenAuthorityOption, ActivationType, getBaseFeeHandler,
+  DammV2DynamicFeeMode, TokenType, TokenAuthorityOption, ActivationType, getBaseFeeHandler, deriveDbcPoolAuthority, deriveDammV2PoolAuthority,
 } from '@meteora-ag/dynamic-bonding-curve-sdk';
 
 export const SOL_MINT = 'So11111111111111111111111111111111111111112';
@@ -24,7 +25,9 @@ export function platformPolicy(env = process.env) {
   const wallet = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(env.FORGE_PARTNER_WALLET || '') ? env.FORGE_PARTNER_WALLET : null;
   const share = wallet ? clampNum(env.FORGE_PLATFORM_FEE_SHARE, 0, 100, 20) : 0;     // % of the LP-side trading fee kept by the platform
   const creation = wallet ? clampNum(env.FORGE_POOL_CREATION_FEE_SOL, 0, 100, 0) : 0;
+  const hook = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(env.FORGE_HOOK_PROGRAM || '') ? env.FORGE_HOOK_PROGRAM : null;
   return {
+    hookProgram: hook,                                                               // deployed sine-hooks program (programs/sine-hooks)
     partnerWallet: wallet,
     platformFeeSharePct: share,
     maxCreatorFeeSharePct: 100 - share,
@@ -62,6 +65,16 @@ export const PRESETS = {
     form: { fees: { tradeBps: 200, snipe: { enabled: true, startBps: 2500, durationSec: 30, mode: 'linear', periods: 10 }, dynamic: false, collectIn: 'quote', creatorSharePct: 100 },
       grad: { feeBps: 200, feeMode: 'quote', migrationFeePct: 1, migrationFeeCreatorPct: 100 } },
   },
+  hookedFair: {
+    label: 'Hooked: fair launch rules',
+    blurb: 'On-chain rules on every transfer: 1% holder cap, 0.5% max per transaction, 2 buys per block, no wallet-to-wallet sends for 1 hour. Needs the sine-hooks program.',
+    form: { hooks: { enabled: true, launchPhaseMin: 60, maxWalletPct: 1, maxTxPct: 0.5, maxBuysPerSlot: 2, noP2p: true } },
+  },
+  hookedDevLock: {
+    label: 'Hooked: locked dev',
+    blurb: 'The creator wallet can’t sell or send for 30 days, then at most 1% of supply per day. Plus a 2% holder cap for 6 hours. Needs the sine-hooks program.',
+    form: { hooks: { enabled: true, launchPhaseMin: 360, maxWalletPct: 2, creatorLockDays: 30, creatorDailyPct: 1 } },
+  },
   fairLocked: {
     label: 'Fair & vested',
     blurb: '10% team allocation locked: 30-day cliff, then linear unlock over 6 months. LP 100% permanently locked.',
@@ -76,7 +89,9 @@ export const DEFAULT_FORM = {
   fees: { tradeBps: 100, snipe: { enabled: true, startBps: 9900, durationSec: 60, mode: 'exponential', periods: 60 }, dynamic: true, collectIn: 'quote', creatorSharePct: 50, devBuySkipsTax: true },
   grad: { feeBps: 100, feeMode: 'quote', compoundPct: 50, dynamic: true, lp: { creatorLockedPct: 100, creatorPct: 0, partnerLockedPct: 0, partnerPct: 0 }, migrationFeePct: 0, migrationFeeCreatorPct: 0 },
   vesting: { enabled: false, pct: 10, cliffDays: 30, durationDays: 180, periods: 180, cliffUnlockPct: 0 },
+  hooks: { enabled: false, launchPhaseMin: 60, maxWalletPct: 0, maxTxPct: 0, maxBuysPerSlot: 0, noP2p: false, allowlist: [], allowlistMin: 0, creatorLockDays: 0, creatorDailyPct: 0 },
 };
+export const MAX_HOOK_ALLOWLIST = 20;     // keeps the configure transaction under Solana's size limit
 
 class FormError extends Error { constructor(msg) { super(msg); this.status = 400; } }
 function clampNum(v, lo, hi, dflt) { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt; }
@@ -164,7 +179,26 @@ export function normalizeForm(input, quoteInfo, policy) {
   };
   if (vesting.enabled && vesting.cliffDays + vesting.durationDays > 730) throw new FormError('Vesting (cliff + duration) can be at most 2 years.');
 
-  return { token, curve, fees, grad, vesting, quote: { mint: quoteInfo.mint, decimals: quoteInfo.decimals } };
+  const h = f.hooks || {};
+  const hooks = { enabled: Boolean(h.enabled) };
+  if (hooks.enabled) {
+    if (!policy.hookProgram) throw new FormError('Transfer-hook rules are not switched on for this site yet (the owner needs to deploy programs/sine-hooks and set FORGE_HOOK_PROGRAM).');
+    token.tokenType = 'token2022';                                    // transfer hooks are a Token-2022 feature
+    hooks.launchPhaseMin = int(h.launchPhaseMin, 1, 43_200, 60);
+    const pctOpt = (v, lo) => { const n = Number(v) || 0; return n <= 0 ? 0 : clampNum(n, lo, 100, 0); };
+    hooks.maxWalletPct = pctOpt(h.maxWalletPct, 0.1);
+    hooks.maxTxPct = pctOpt(h.maxTxPct, 0.05);
+    hooks.maxBuysPerSlot = int(h.maxBuysPerSlot, 0, 50, 0);
+    hooks.noP2p = Boolean(h.noP2p);
+    hooks.allowlist = [...new Set((Array.isArray(h.allowlist) ? h.allowlist : []).map((a) => String(a).trim()).filter((a) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a)))].slice(0, MAX_HOOK_ALLOWLIST);
+    hooks.allowlistMin = hooks.allowlist.length ? int(h.allowlistMin, 0, hooks.launchPhaseMin, 0) : 0;
+    hooks.creatorLockDays = clampNum(h.creatorLockDays, 0, 730, 0);
+    hooks.creatorDailyPct = pctOpt(h.creatorDailyPct, 0.01);
+    if (!hooks.maxWalletPct && !hooks.maxTxPct && !hooks.maxBuysPerSlot && !hooks.noP2p && !hooks.allowlistMin && !hooks.creatorLockDays && !hooks.creatorDailyPct)
+      throw new FormError('Turn on at least one transfer-hook rule, or switch hooks off.');
+  }
+  if (token.authority === 'creatorMint' && !hooks.enabled) throw new FormError('Meteora only allows the creator to keep mint authority on transfer-hook coins.');
+  return { token, curve, fees, grad, vesting, hooks, quote: { mint: quoteInfo.mint, decimals: quoteInfo.decimals } };
 }
 
 /** Normalised form → DBC ConfigParameters (validated by the SDK exactly as the program will). */
@@ -222,7 +256,7 @@ export function buildConfig(norm, policy) {
     config = curve.shape === 'twoSegment'
       ? buildCurveWithTwoSegments({ ...params, percentageSupplyOnMigration: curve.supplyOnMigrationPct })
       : buildCurveWithMarketCap(params);
-    validateConfigParameters({ ...config, leftoverReceiver: SOL_MINT });
+    validateConfigParameters({ ...config, leftoverReceiver: SOL_MINT }, norm.hooks && norm.hooks.enabled ? { isTransferHook: true, transferHookProgram: new PublicKey(policy.hookProgram) } : undefined);
   } catch (e) {
     throw new FormError(`These settings can't make a valid curve: ${String(e.message || e).replace(/\s+/g, ' ').slice(0, 220)}`);
   }
@@ -248,6 +282,7 @@ export function summarize(norm, config, policy, quoteSymbol = 'quote') {
     graduation: { pool: 'Meteora DAMM v2', feePct: norm.grad.feeBps / 100, feeMode: norm.grad.feeMode, lockedLpPct: norm.grad.lp.creatorLockedPct + norm.grad.lp.partnerLockedPct, ...norm.grad.lp },
     authority: norm.token.authority,
     poolCreationFeeSol: policy.poolCreationFeeSol,
+    hooks: norm.hooks.enabled ? { ...norm.hooks } : null,
   };
 }
 const round2 = (x) => Math.round(x * 100) / 100;
@@ -267,3 +302,73 @@ export function taxCurve(baseFee) {
   return out;
 }
 export { FormError };
+
+/* ───────────── transfer-hook rules (programs/sine-hooks) ───────────── */
+
+const HOOK_CONFIG_SEED = Buffer.from('sine-hooks'), HOOK_EXTRA_SEED = Buffer.from('extra-account-metas');
+export const hookConfigAddress = (mint, program) => PublicKey.findProgramAddressSync([HOOK_CONFIG_SEED, new PublicKey(mint).toBuffer()], new PublicKey(program))[0];
+export const hookExtraMetasAddress = (mint, program) => PublicKey.findProgramAddressSync([HOOK_EXTRA_SEED, new PublicKey(mint).toBuffer()], new PublicKey(program))[0];
+
+/** Owners the rules never restrict: the bonding-curve vaults' authority and the graduated pool's. */
+export function hookExemptOwners() { return [deriveDbcPoolAuthority(), deriveDammV2PoolAuthority()]; }
+
+/** The sine-hooks Configure instruction (signed by the creator and the coin's mint key). */
+export function hookConfigureIx(norm, creator, mint, program) {
+  const h = norm.hooks, supplyRaw = BigInt(norm.token.supply) * 10n ** BigInt(norm.token.decimals);
+  const bps = (pct) => Math.round(pct * 100);
+  const exempt = hookExemptOwners(), allow = h.allowlist.map((a) => new PublicKey(a));
+  const buf = Buffer.alloc(8 + 8 + 4 + 2 + 2 + 1 + 1 + 4 + 4 + 2 + 1 + 32 * exempt.length + 1 + 32 * allow.length);
+  let o = 0;
+  o += buf.write('SINECFG1', o, 'ascii');
+  buf.writeBigUInt64LE(supplyRaw, o); o += 8;
+  buf.writeUInt32LE(h.launchPhaseMin * 60, o); o += 4;
+  buf.writeUInt16LE(bps(h.maxWalletPct), o); o += 2;
+  buf.writeUInt16LE(bps(h.maxTxPct), o); o += 2;
+  buf.writeUInt8(h.maxBuysPerSlot, o); o += 1;
+  buf.writeUInt8(h.noP2p ? 1 : 0, o); o += 1;
+  buf.writeUInt32LE(h.allowlistMin * 60, o); o += 4;
+  buf.writeUInt32LE(Math.round(h.creatorLockDays * 86400), o); o += 4;
+  buf.writeUInt16LE(bps(h.creatorDailyPct), o); o += 2;
+  buf.writeUInt8(exempt.length, o); o += 1;
+  for (const k of exempt) { k.toBuffer().copy(buf, o); o += 32; }
+  buf.writeUInt8(allow.length, o); o += 1;
+  for (const k of allow) { k.toBuffer().copy(buf, o); o += 32; }
+  return new TransactionInstruction({ programId: new PublicKey(program), data: buf, keys: [
+    { pubkey: creator, isSigner: true, isWritable: true },
+    { pubkey: mint, isSigner: true, isWritable: false },
+    { pubkey: hookExtraMetasAddress(mint, program), isSigner: false, isWritable: true },
+    { pubkey: hookConfigAddress(mint, program), isSigner: false, isWritable: true },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+  ] });
+}
+
+/** Remaining accounts DBC needs for a swap of a hooked coin (same order spl-token resolves them). */
+export function hookSwapAccounts(mint, program) {
+  return {
+    transferHookAccountsInfo: { slices: [{ accountsType: { transferHookBase: {} }, length: 3 }] },
+    transferHookAccounts: [
+      { pubkey: hookConfigAddress(mint, program), isSigner: false, isWritable: true },
+      { pubkey: new PublicKey(program), isSigner: false, isWritable: false },
+      { pubkey: hookExtraMetasAddress(mint, program), isSigner: false, isWritable: false },
+    ],
+  };
+}
+
+/** Decodes the config PDA written by sine-hooks (layout: programs/sine-hooks/src/rules.rs). */
+export function decodeHookRules(data) {
+  const b = Buffer.from(data);
+  if (b.length < 2 + 32 + 8 * 3 + 4 + 2 || b[0] !== 1) return null;
+  let o = 2;
+  const key = () => { const k = new PublicKey(b.subarray(o, o + 32)).toBase58(); o += 32; return k; };
+  const u64 = () => { const v = b.readBigUInt64LE(o); o += 8; return v; };
+  const i64 = () => { const v = Number(b.readBigInt64LE(o)); o += 8; return v; };
+  const u16 = () => { const v = b.readUInt16LE(o); o += 2; return v; };
+  const u8 = () => b[o++];
+  const r = { creator: key(), supply: u64().toString(), createdTs: i64(), launchPhaseEndTs: i64(), maxWalletBps: u16(), maxTxBps: u16(), maxBuysPerSlot: u8(), noP2p: u8() === 1,
+    allowlistUntilTs: i64(), creatorLockUntilTs: i64(), creatorDailyBps: u16() };
+  i64(); u64(); u64(); u8();                                         // counters (window start, sent, last slot, buys in slot)
+  const ne = u8(); const exempt = []; for (let i = 0; i < 4; i++) { const k = key(); if (i < ne) exempt.push(k); }
+  r.allowlistCount = u8();
+  r.exempt = exempt;
+  return r;
+}

@@ -1,0 +1,23 @@
+# Builds and tests the sine-hooks transfer-hook program. The deployable .so is attached as an artifact.
+name: sine-hooks
+on:
+  push:
+    paths: ["programs/sine-hooks/**", ".github/workflows/sine-hooks.yml"]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: programs/sine-hooks } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Solana CLI (Anza)
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+      - name: Rule unit tests + end-to-end Token-2022 test
+        run: cargo test
+      - name: Build for Solana (SBF)
+        run: cargo build-sbf
+      - uses: actions/upload-artifact@v4
+        with: { name: sine_hooks.so, path: programs/sine-hooks/target/deploy/sine_hooks.so }

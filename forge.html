@@ -59,7 +59,7 @@
           </div>
           <div class="lp-row">
             <label class="lp-field"><span>Token standard</span><select class="field" id="t-type"><option value="spl">SPL token (widest support)</option><option value="token2022">Token-2022</option></select></label>
-            <label class="lp-field"><span>Metadata &amp; mint authority</span><select class="field" id="t-auth"><option value="immutable">Immutable: nobody can change it (safest)</option><option value="creator">Creator can update metadata</option><option value="creatorMint">Creator can update metadata AND mint more (flagged as risky)</option></select></label>
+            <label class="lp-field"><span>Metadata &amp; mint authority</span><select class="field" id="t-auth"><option value="immutable">Immutable: nobody can change it (safest)</option><option value="creator">Creator can update metadata</option><option value="creatorMint">Creator can update metadata AND mint more (hooked coins only; flagged as risky)</option></select></label>
           </div>
           <div class="lp-row">
             <label class="lp-field"><span>Vanity address ending <em>(optional, 1–4 characters, e.g. “sine”)</em></span><input class="field" id="v-suffix" maxlength="4" placeholder="none" pattern="[1-9A-HJ-NP-Za-km-z]*"></label>
@@ -120,6 +120,31 @@
         <label class="lp-check"><input type="checkbox" id="fe-dyn" checked> <span><strong>Volatility fee:</strong> adds an extra fee during violent price swings, so bots pay more for pump-and-dump trading.</span></label>
         <label class="lp-check"><input type="checkbox" id="fe-devmin" checked> <span><strong>My dev buy skips the launch tax:</strong> your buy in the launch transaction pays only the minimum fee. It happens atomically with creation, so nobody can buy before you.</span></label>
         <label class="lp-field"><span>Collect fees in</span><select class="field" id="fe-collect"><option value="quote">The pair token only (easy to spend on buybacks)</option><option value="both">Whatever token is sold (coin on buys, pair on sells)</option></select></label>
+      </fieldset>
+
+      <!-- 4b · Transfer-hook rules -->
+      <fieldset class="panel fg-card" id="hk-card">
+        <legend><span class="fg-n">H</span> On-chain rules (transfer hook)</legend>
+        <label class="lp-check"><input type="checkbox" id="hk-on"> <span><strong>Build rules into the token itself.</strong> A Token-2022 transfer hook checks every buy, sell and send. A transfer that breaks a rule simply fails, so no bot or website has to be trusted. Rules run on the bonding curve, end when the launch phase ends (max 30 days), and Meteora turns the hook off for good at graduation.</span></label>
+        <p class="how fg-bad" id="hk-off" hidden>Not available on this site yet: the owner needs to deploy <code>programs/sine-hooks</code> and set <code>FORGE_HOOK_PROGRAM</code>.</p>
+        <div id="hk-box" hidden>
+          <div class="lp-row fg-row3">
+            <label class="lp-field"><span>Launch phase (minutes)</span><input class="field" id="hk-phase" type="number" min="1" max="43200" step="1" value="60"></label>
+            <label class="lp-field"><span>Holder cap (% of supply, 0 = off)</span><input class="field" id="hk-wallet" type="number" min="0" max="100" step="0.1" value="1"></label>
+            <label class="lp-field"><span>Max per transaction (%, 0 = off)</span><input class="field" id="hk-tx" type="number" min="0" max="100" step="0.05" value="0.5"></label>
+          </div>
+          <div class="lp-row fg-row3">
+            <label class="lp-field"><span>Anti-bundle: max buys per block (0 = off)</span><input class="field" id="hk-slot" type="number" min="0" max="50" step="1" value="2"></label>
+            <label class="lp-field"><span>Creator lock (days, 0 = off)</span><input class="field" id="hk-lock" type="number" min="0" max="730" step="1" value="0"></label>
+            <label class="lp-field"><span>Creator max sell per day (% of supply, 0 = off)</span><input class="field" id="hk-daily" type="number" min="0" max="100" step="0.1" value="0"></label>
+          </div>
+          <label class="lp-check"><input type="checkbox" id="hk-p2p" checked> <span><strong>No wallet-to-wallet sends</strong> during the launch phase. Stops bundlers from buying with many wallets and consolidating the supply.</span></label>
+          <details class="fg-adv"><summary>Allowlist phase (early access for chosen wallets)</summary>
+            <label class="lp-field"><span>Allowlisted wallets <em>(one per line, up to <span id="hk-max">20</span>)</em></span><textarea class="field" id="hk-allow" rows="4" spellcheck="false" placeholder="wallet address&#10;wallet address"></textarea></label>
+            <label class="lp-field"><span>Only they can buy for the first (minutes)</span><input class="field" id="hk-allowmin" type="number" min="0" max="43200" step="1" value="0"></label>
+          </details>
+          <p class="how">The rules are written on-chain <em>before</em> the coin exists, signed with the coin’s own key, and can never be changed. Holders can always sell back to the curve, and there is no blacklist or pause. Note that Token-2022 hook tokens are supported by most wallets, but some aggregators route them only after graduation.</p>
+        </div>
       </fieldset>
 
       <!-- 5 · Graduation -->
@@ -192,7 +217,8 @@
           <li data-step="key">Generate the coin’s address</li>
           <li data-step="upload">Store image &amp; details on IPFS</li>
           <li data-step="build">Build the launch transactions</li>
-          <li data-step="sign">Approve in your wallet (one prompt, two transactions)</li>
+          <li data-step="sign">Approve in your wallet (one prompt for all transactions)</li>
+          <li data-step="hook" id="step-hook" hidden>Write the on-chain transfer rules</li>
           <li data-step="config">Create the coin’s fee &amp; curve config</li>
           <li data-step="pool">Create the coin and dev buy</li>
         </ol>
