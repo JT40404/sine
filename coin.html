@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coin — SINE Forge</title>
+<meta name="description" content="Trade a SINE Forge coin on its bonding curve or graduated pool, watch its live launch tax and graduation progress, and run its creator-fee plan.">
+<meta name="theme-color" content="#0F1114">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+<div class="wrap">
+<header class="app-header">
+  <a class="brand" href="/" aria-label="SINE home"><img src="/assets/sine-icon.svg" width="32" height="32" alt=""><span>SINE</span></a>
+  <nav class="lp-nav" aria-label="Sections"><a class="nav-link" href="/explore">Explore</a><a class="nav-link" href="/forge">Create</a><a class="nav-link" href="/launch">pump.fun launch</a><a class="nav-link" href="/analyzer">Analyzer</a></nav>
+  <div class="wallet-box"><span class="chip" id="wallet-chip">Not connected</span><button class="btn" type="button" id="connect">Connect wallet</button></div>
+</header>
+<nav class="mnav" aria-label="Site"><a href="/">Home</a><a href="/explore">Explore</a><a href="/forge">Create</a><a href="/launch">pump.fun</a><a href="/analyzer">Analyzer</a></nav>
+
+<main class="app-main lp fg">
+  <form class="cn-find" id="find" hidden>
+    <label class="lp-field"><span>Open a Forge coin by its contract address</span><input class="field" id="find-mint" placeholder="Coin mint address" spellcheck="false"></label>
+    <button class="btn" type="submit">Open</button>
+  </form>
+  <div class="notice" id="status" role="status" hidden></div>
+
+  <section id="coin" hidden>
+    <div class="cn-head panel">
+      <div class="cn-id">
+        <div class="lp-preview-img cn-img" id="c-img"></div>
+        <div>
+          <h1 class="cn-title"><span id="c-sym">$—</span> <span class="muted cn-name" id="c-name"></span></h1>
+          <div class="cn-mint"><code id="c-mint"></code> <button class="linklike" type="button" id="c-copy">Copy</button> · <span id="c-pair" class="muted"></span></div>
+          <div class="cn-links" id="c-links"></div>
+        </div>
+      </div>
+      <div class="cc-stats cn-stats">
+        <span><em>Price</em><strong id="s-price">—</strong></span>
+        <span><em>Market cap</em><strong id="s-mc">—</strong></span>
+        <span><em>Fee now</em><strong id="s-fee">—</strong></span>
+        <span><em>Status</em><strong id="s-state">—</strong></span>
+      </div>
+    </div>
+    <p class="lp-lead cn-desc" id="c-desc" hidden></p>
+
+    <div class="cn-grid">
+      <div class="cn-col">
+        <!-- graduation progress -->
+        <div class="panel lp-card">
+          <div class="cn-prog-head"><h2>Bonding curve</h2><span class="mono" id="p-text">—</span></div>
+          <div class="cn-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="p-bar"><span id="p-fill"></span></div>
+          <p class="how" id="p-sub"></p>
+          <button class="btn btn-ghost" type="button" id="migrate" hidden>Graduate it now (move liquidity to DAMM v2)</button>
+        </div>
+
+        <!-- live anti-sniper tax -->
+        <div class="panel lp-card" id="tax-card" hidden>
+          <div class="cn-prog-head"><h2>Launch tax</h2><span class="mono cn-taxnow" id="tax-now">—</span></div>
+          <svg class="fg-tax" id="tax-svg" viewBox="0 0 600 140" role="img" aria-label="Launch tax over time"><path id="tax-area" fill="rgba(240,168,87,.15)"/><path id="tax-line" fill="none" stroke="#F0A857" stroke-width="2.5"/><line id="tax-cursor" y1="8" y2="132" stroke="#ECE9E2" stroke-dasharray="3 4"/></svg>
+          <p class="how" id="tax-sub"></p>
+        </div>
+
+        <!-- chart -->
+        <div class="panel lp-card">
+          <div class="cn-prog-head"><h2>Price</h2>
+            <div class="segmented seg-sm" role="group" aria-label="Candle interval" id="iv-seg"><button type="button" data-iv="1m" aria-pressed="true">1m</button><button type="button" data-iv="5m" aria-pressed="false">5m</button><button type="button" data-iv="15m" aria-pressed="false">15m</button><button type="button" data-iv="1h" aria-pressed="false">1h</button></div>
+          </div>
+          <div class="cc-wrap">
+            <svg viewBox="0 0 1200 320" id="ch-svg" role="img" aria-label="Price chart"><g id="ch-grid"></g><path id="ch-area" fill="rgba(127,227,181,.08)"/><path id="ch-line" fill="none" stroke="#7FE3B5" stroke-width="2"/></svg>
+            <p class="cc-empty" id="ch-empty">The chart appears once GeckoTerminal indexes the first trades, usually within a few minutes of launch.</p>
+          </div>
+        </div>
+
+        <!-- rules -->
+        <div class="panel lp-card">
+          <h2>On-chain rules for this coin</h2>
+          <div class="fg-badges" id="r-badges"></div>
+          <dl class="lp-dl" id="r-dl"></dl>
+          <div id="r-plan"></div>
+        </div>
+
+        <!-- holders -->
+        <div class="panel lp-card">
+          <div class="cn-prog-head"><h2>Top holders</h2><button class="linklike" type="button" id="h-load">Load</button></div>
+          <ol class="cn-holders" id="h-list"><li class="muted">Real wallets only. Pool vaults and lockers are left out.</li></ol>
+        </div>
+      </div>
+
+      <div class="cn-col">
+        <!-- trade -->
+        <div class="panel lp-card cn-trade">
+          <div class="segmented cn-side" role="group" aria-label="Buy or sell" id="side-seg"><button type="button" data-side="buy" aria-pressed="true">Buy</button><button type="button" data-side="sell" aria-pressed="false">Sell</button></div>
+          <label class="lp-field"><span id="t-label">Amount</span><input class="field cn-amt" id="t-amt" inputmode="decimal" placeholder="0.0" autocomplete="off"></label>
+          <div class="cn-quick" id="t-quick"></div>
+          <div class="cn-est" id="t-est"></div>
+          <details class="fg-adv"><summary>Slippage <span id="t-slip-v">5%</span></summary><label class="lp-field"><span>Max slippage (%)</span><input class="field" id="t-slip" type="number" min="0.1" max="50" step="0.1" value="5"></label></details>
+          <button class="btn lp-go" type="button" id="t-go" disabled>Connect a wallet to trade</button>
+          <p class="how" id="t-bal"></p>
+        </div>
+
+        <!-- creator studio -->
+        <div class="panel lp-card cn-studio" id="studio" hidden>
+          <h2>Creator studio</h2>
+          <dl class="lp-dl">
+            <div><dt>Unclaimed creator fees</dt><dd id="cs-fees">—</dd></div>
+            <div><dt>Lifetime trading fees (all parties)</dt><dd id="cs-life">—</dd></div>
+          </dl>
+          <button class="btn btn-ghost" type="button" id="cs-claim">Claim to my wallet</button>
+
+          <h3 class="cn-h3">Fee router</h3>
+          <p class="how">Splits a budget, either freshly claimed fees or an amount you choose, across your plan. Every step is its own wallet approval and public transaction.</p>
+          <div class="lp-row fg-row4">
+            <label class="lp-field"><span>Buyback &amp; burn %</span><input class="field" id="rt-burn" type="number" min="0" max="100" step="5" value="50"></label>
+            <label class="lp-field"><span>Add LP %</span><input class="field" id="rt-lp" type="number" min="0" max="100" step="5" value="0"></label>
+            <label class="lp-field"><span>Holder airdrop %</span><input class="field" id="rt-hold" type="number" min="0" max="100" step="5" value="0"></label>
+            <label class="lp-field"><span>Fee-share %</span><input class="field" id="rt-split" type="number" min="0" max="100" step="5" value="0"></label>
+          </div>
+          <label class="lp-field" id="rt-wallets-wrap"><span>Fee-share wallets <em>(one per line: address, weight)</em></span><textarea class="field" id="rt-wallets" rows="3" placeholder="7xKX…abc, 1&#10;9wQp…xyz, 3" spellcheck="false"></textarea></label>
+          <div class="lp-row">
+            <label class="lp-field"><span>Budget</span><select class="field" id="rt-src"><option value="claim">Claim fees now and route them</option><option value="amount">Route an amount from my wallet</option></select></label>
+            <label class="lp-field" id="rt-amt-wrap" hidden><span>Amount (<span class="q-sym">pair</span>)</span><input class="field" id="rt-amt" inputmode="decimal" placeholder="0.0"></label>
+          </div>
+          <label class="lp-check"><input type="checkbox" id="rt-lock" checked> Permanently lock the liquidity I add (it still earns fees, but it can never be withdrawn)</label>
+          <button class="btn lp-go" type="button" id="rt-run">Run the fee router</button>
+          <label class="lp-check cn-auto"><input type="checkbox" id="rt-auto"> Auto: while this page is open, check every <input class="field cn-inline" id="rt-every" type="number" min="5" max="1440" value="30"> min and run when unclaimed fees exceed <input class="field cn-inline" id="rt-min" inputmode="decimal" value="0.1"> <span class="q-sym">pair</span></label>
+          <ol class="lp-steps" id="rt-steps"></ol>
+
+          <h3 class="cn-h3">More tools</h3>
+          <div class="cn-tools">
+            <div class="cn-tool"><label class="lp-field"><span>Burn coins from my wallet</span><input class="field" id="tl-burn" inputmode="decimal" placeholder="amount"></label><button class="btn btn-ghost" type="button" id="tl-burn-go">Burn</button></div>
+            <div class="cn-tool" id="tl-lp-box"><label class="lp-field"><span>Add liquidity: <span class="q-sym">pair</span> amount <em>(the matching coin amount is calculated)</em></span><input class="field" id="tl-lp" inputmode="decimal" placeholder="amount"></label><button class="btn btn-ghost" type="button" id="tl-lp-go">Add</button></div>
+            <div class="cn-tool"><button class="btn btn-ghost" type="button" id="tl-lpfees">Claim LP fees</button><button class="btn btn-ghost" type="button" id="tl-surplus">Withdraw surplus</button><button class="btn btn-ghost" type="button" id="tl-migfee">Withdraw graduation fee</button></div>
+            <div class="cn-tool"><label class="lp-field"><span>Transfer creator rights to</span><input class="field" id="tl-newc" placeholder="wallet address" spellcheck="false"></label><button class="btn btn-ghost" type="button" id="tl-newc-go">Transfer</button></div>
+          </div>
+          <ul class="lp-history" id="cs-history"></ul>
+        </div>
+
+        <!-- platform -->
+        <div class="panel lp-card" id="platform" hidden>
+          <h2>Platform fees</h2>
+          <dl class="lp-dl"><div><dt>Unclaimed platform fees</dt><dd id="pf-fees">—</dd></div></dl>
+          <button class="btn btn-ghost" type="button" id="pf-claim">Claim platform fees</button>
+        </div>
+      </div>
+    </div>
+  </section>
+  <p class="how lp-foot">Trades run directly against Meteora’s Dynamic Bonding Curve, or after graduation its DAMM v2 pool. Your wallet signs every transaction. Fees shown are the pool’s base fee; a volatility fee may be added during big swings. Nothing here is financial advice.</p>
+</main>
+</div>
+<script src="/config.js"></script>
+<script src="/assets/site.js"></script>
+<script src="/assets/vendor/solana-web3-1.99.0.min.js"></script>
+<script src="/assets/forge-common.js"></script>
+<script src="/assets/coin.js"></script>
+</body>
+</html>

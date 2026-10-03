@@ -58,6 +58,18 @@ function explain(e) {
   return `Pinata upload failed (${e.status || 'network'}${e.message ? ': ' + String(e.message).slice(0, 120) : ''}). Try again shortly.`;
 }
 
+/** The creator-fee plan published with a Forge coin, reduced to plain numbers and wallet addresses. */
+function forgePlan(p) {
+  if (!p || typeof p !== 'object') return null;
+  const pct = (v) => Math.max(0, Math.min(100, Math.round(Number(v) || 0)));
+  const out = { buybackBurnPct: pct(p.buybackBurnPct), addLiquidityPct: pct(p.addLiquidityPct), holderAirdropPct: pct(p.holderAirdropPct), feeSharePct: pct(p.feeSharePct) };
+  if (out.buybackBurnPct + out.addLiquidityPct + out.holderAirdropPct + out.feeSharePct > 100) return null;
+  out.feeShareWallets = (Array.isArray(p.feeShareWallets) ? p.feeShareWallets : []).slice(0, 10)
+    .filter((w) => w && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(w.to) && Number(w.weight) > 0)
+    .map((w) => ({ to: w.to, weight: Math.min(1000, Number(w.weight)) }));
+  return out;
+}
+
 export default async function handler(req, res) {
   const jwt = pinataJwt();
 
@@ -104,8 +116,10 @@ export default async function handler(req, res) {
       name, symbol, image, showName: true,
       description: String(b.description || '').slice(0, 500),
       twitter: clean(b.twitter), telegram: clean(b.telegram), website: clean(b.website),
-      createdOn: 'SINE launchpad',
+      createdOn: b.forge ? 'SINE Forge' : 'SINE launchpad',
     };
+    const plan = forgePlan(b.forge);
+    if (plan) meta.extensions = { sineForgeFeePlan: plan };       // public commitment: what creator fees will be used for
     const metaCid = route === 'v3'
       ? await pinV3(jwt, new Blob([JSON.stringify(meta)], { type: 'application/json' }), `${symbol}.json`)
       : await pinLegacyJson(jwt, meta, `${symbol}.json`);

@@ -8,6 +8,11 @@ window.SINE_CONFIG = {
   tokenAddress: "",
   tokenSymbol: "$SINE",
 
+  // SINE Forge: one-click pair suggestions shown under "Any token" on /forge.
+  // Add the tokens your community pairs with, using their exact mint addresses, e.g.
+  //   { symbol: "STONK", mint: "<STONK mint address>" },
+  forgePairs: [],
+
   links: {
     docs: "",      // e.g. "https://docs.example.com" — leave "" to hide
     x: "https://x.com/SineWaveSOL",

@@ -2,6 +2,16 @@
   "name": "sine-site",
   "private": true,
   "type": "module",
-  "description": "SINE website + market-data API (Vercel serverless functions). No dependencies.",
-  "engines": { "node": ">=20" }
+  "description": "SINE website + market-data API + Forge launchpad (Vercel serverless functions).",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node scripts/forge-selftest.mjs"
+  },
+  "dependencies": {
+    "@meteora-ag/cp-amm-sdk": "1.5.1",
+    "@meteora-ag/dynamic-bonding-curve-sdk": "1.5.13",
+    "@solana/spl-token": "^0.4.13",
+    "@solana/web3.js": "^1.98.0",
+    "bn.js": "^5.2.1"
+  }
 }

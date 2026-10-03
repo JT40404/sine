@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Explore — SINE Forge</title>
+<meta name="description" content="Coins launched on SINE: new launches, coins about to graduate and graduated coins, with any pair token.">
+<meta name="theme-color" content="#0F1114">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+<div class="wrap">
+<header class="app-header">
+  <a class="brand" href="/" aria-label="SINE home"><img src="/assets/sine-icon.svg" width="32" height="32" alt=""><span>SINE</span></a>
+  <nav class="lp-nav" aria-label="Sections"><a class="nav-link" href="/explore" aria-current="page">Explore</a><a class="nav-link" href="/forge">Create</a><a class="nav-link" href="/launch">pump.fun launch</a><a class="nav-link" href="/analyzer">Analyzer</a></nav>
+  <a class="btn" href="/forge">Create a coin</a>
+</header>
+<nav class="mnav" aria-label="Site"><a href="/">Home</a><a href="/explore" aria-current="page">Explore</a><a href="/forge">Create</a><a href="/launch">pump.fun</a><a href="/analyzer">Analyzer</a></nav>
+
+<main class="app-main lp fg">
+  <div class="report-head">
+    <div><div class="meta">SINE FORGE · EXPLORE</div><h1>Launched on SINE</h1></div>
+  </div>
+  <div class="ex-bar">
+    <div class="segmented" role="group" aria-label="Show" id="ex-tabs">
+      <button type="button" data-t="new" aria-pressed="true">New</button><button type="button" data-t="hot" aria-pressed="false">About to graduate</button><button type="button" data-t="grad" aria-pressed="false">Graduated</button><button type="button" data-t="mc" aria-pressed="false">Top market cap</button>
+    </div>
+    <select class="field ex-pair" id="ex-pair" aria-label="Pair token"><option value="">All pairs</option></select>
+    <input class="field ex-q" id="ex-q" placeholder="Search name, ticker or address" aria-label="Search">
+  </div>
+  <div class="notice info" id="status" role="status" hidden></div>
+  <div class="ex-grid" id="ex-grid"></div>
+</main>
+</div>
+<script src="/config.js"></script>
+<script src="/assets/site.js"></script>
+<script src="/assets/vendor/solana-web3-1.99.0.min.js"></script>
+<script src="/assets/forge-common.js"></script>
+<script src="/assets/explore.js"></script>
+</body>
+</html>
