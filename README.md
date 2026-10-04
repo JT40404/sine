@@ -19,6 +19,7 @@ api/
   ecosystem.js        GET /api/ecosystem?interval=1m…1d (Core 6 on-chain basket)
   token.js            GET /api/token?address=<mint>
   forge.js            SINE Forge transaction builder (all Forge actions, one function)
+programs/sine-hooks/  Rust transfer-hook program for on-chain launch rules (deploy it yourself)
   _lib/forge.js       launch form → Meteora DBC config (presets, limits, platform policy)
   health.js           GET /api/health
   _lib/gecko.js       data-provider client, windows, caching
@@ -116,7 +117,8 @@ Forge pulls together the features of the other launchpads (pump.fun, letsbonk, B
 | **Creator tools** | Claim creator fees, claim LP fees, withdraw surplus, withdraw graduation fee, transfer creator rights, burn. |
 | **Platform revenue** | Optional, for the site owner: a share of trading fees, a launch fee and LP share. The platform wallet gets a "Claim platform fees" panel on each coin page. |
 | **Explore** | New, about-to-graduate, graduated and top-market-cap lists, filtered by pair, with search and a progress bar on each coin. |
-| **Presets** | Classic (pump.fun style), Sniper shield, Meme-pair, Stable-pair, Creator revenue, Fair & vested. |
+| **On-chain rules (transfer hook)** | Hooked-style rules built into the token: holder cap, transaction cap, anti-bundle (buys per block), no wallet-to-wallet sends, allowlist phase, creator lock, creator daily sell limit. Enforced by our `sine-hooks` program on every transfer. The rules are written before the coin exists, signed by its mint key, and can never be changed. They last up to 30 days and Meteora turns the hook off at graduation. See `programs/sine-hooks/README.md`. Needs `FORGE_HOOK_PROGRAM`. |
+| **Presets** | Classic (pump.fun style), Sniper shield, Meme-pair, Stable-pair, Creator revenue, Hooked: fair launch rules, Hooked: locked dev, Fair & vested. |
 
 **Non-custodial.** `/api/forge` only builds unsigned transactions. The coin's mint key and its config key are generated in the browser. The user's wallet signs and pays: one prompt for the two launch transactions. The server creates only throwaway LP-position NFT keys, which control nothing until the user's wallet signs.
 
@@ -126,6 +128,7 @@ Forge pulls together the features of the other launchpads (pump.fun, letsbonk, B
 - `RPC_URL`: **required in practice.** Use a paid RPC such as Helius. Pool lookups by coin use `getProgramAccounts`, which public RPCs block.
 - `PINATA_JWT`: image and metadata uploads, the same as for `/launch`.
 - Upstash Redis (`KV_REST_API_*`): the Explore list and the ticker.
+- `FORGE_HOOK_PROGRAM`: the deployed `programs/sine-hooks` program id. It switches on on-chain rules. Build and deploy steps are in `programs/sine-hooks/README.md`.
 - Optional platform revenue:
   - `FORGE_PARTNER_WALLET`: your fee wallet
   - `FORGE_PLATFORM_FEE_SHARE`: % of the 80% the platform keeps (default 20)
@@ -142,7 +145,8 @@ Forge pulls together the features of the other launchpads (pump.fun, letsbonk, B
 
 **What it can't do (be upfront with users):**
 - The fee router and auto router run from the creator's wallet while the page is open. The published plan is a public commitment, but the program doesn't enforce it. Holders can verify it from the on-chain history.
-- Anti-bot protection is fee-based: launch tax and volatility fee. DBC has no max-wallet or per-transaction buy cap.
+- Without the hook program, anti-bot protection is fee-based only: launch tax and volatility fee. With it, holder caps, transaction caps and anti-bundle limits are enforced on-chain during the launch phase.
+- Some aggregators don't route Token-2022 hook tokens until graduation, when the hook is turned off.
 - Meteora's protocol fee (20% of trading fees) and its minimum fee (0.25%) apply.
 
 **Before going public:**
